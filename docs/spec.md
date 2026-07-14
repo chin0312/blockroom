@@ -12,10 +12,12 @@ wallet can act as their identity, how a learning session can be represented
 as a UI concept ("rooms"), and how completing a session can be recorded
 on-chain as a simple, verifiable check-in.
 
-It is deliberately small: one landing page, one wallet connection, one
-static room list, and one smart contract with exactly one write function
-and one read function. Everything beyond that is explicitly out of scope
-for this version (see "Features Excluded").
+It is deliberately focused, but it must behave like a demonstrable MVP rather
+than a single scrolling concept page. It includes a concise homepage, separate
+explanation pages, an interactive room directory and room-detail flow, a local
+30-minute presence timer, a dashboard, one wallet connection, and one smart
+contract with exactly one write function and one read function. Everything
+beyond that is explicitly out of scope (see "Features Excluded").
 
 ## User Problem
 
@@ -50,42 +52,46 @@ the first time.
 ## Core User Flow
 
 ```
-Land on homepage
-      ↓
-Read what BlockRoom is (hero + how-it-works)
+Land on the concise homepage
       ↓
 Connect wallet (RainbowKit → MetaMask, Monad Testnet)
       ↓
 See wallet address + network confirmed as "connected"
       ↓
-Browse static room cards (type labels only, no occupancy data)
+Navigate between What is BlockRoom, How it works, Rooms, and Dashboard
       ↓
-Click "Complete Learning Session"
+Browse the room directory (type labels + honest "Empty room" states)
       ↓
-Wallet prompts a transaction → checkIn() is called
+Open an individual room and start a focus session
       ↓
-Transaction confirms → getCheckIns(address) is re-read
+Accumulate 30 minutes only while that room page is open and visible
       ↓
-UI reflects the new, real on-chain count
+Complete the session → save an explicitly labelled local demo record
+      ↓
+Phase 3: wallet transaction → checkIn() → real on-chain count refresh
 ```
 
 ## Features Included
 
 | # | Feature | Notes |
 |---|---|---|
-| 1 | Landing page | Hero, "what is BlockRoom", how-it-works, on-chain reputation explainer |
+| 1 | Multi-page frontend shell | Concise homepage plus separate What is BlockRoom, How it works, Rooms, Room Detail, and Dashboard routes |
 | 2 | Wallet connection | RainbowKit + wagmi + viem, Monad Testnet, address + network display |
-| 3 | Room prototype | Four static room cards spanning learning, co-working, and hackathon use cases — UI only; show type labels, never user or online counts |
-| 4 | Smart contract | `BlockRoomCheckIn.sol` — `checkIn()` (write), `getCheckIns(address)` (read) |
-| 5 | On-chain interaction | "Complete Learning Session" button triggers a real Monad Testnet transaction |
-| 6 | Documentation | spec.md, design.md, agent.md, final README with AI-vs-human breakdown |
+| 3 | Interactive room prototype | Four room types with filters, navigable room-detail screens, honest empty states, and no fabricated presence data |
+| 4 | Local session timer | A room session accumulates time only while its room screen is open and the tab is visible; completion unlocks at 30 minutes |
+| 5 | Local demo history | Completed eligible sessions persist in the current browser and appear in Dashboard, clearly labelled as local and not on-chain |
+| 6 | Dashboard | Connected identity, active-session status, local session history, and the on-chain reputation explainer/action area |
+| 7 | Smart contract | `BlockRoomCheckIn.sol` — `checkIn()` (write), `getCheckIns(address)` (read) |
+| 8 | On-chain interaction | Phase 3: an eligible completed session can trigger a real Monad Testnet transaction |
+| 9 | Documentation | spec.md, design.md, agent.md, final README with AI-vs-human breakdown |
 
-### Static Room Card Content
+### Room Card Content
 
-These cards are honest prototype placeholders, not claims that real rooms,
-courses, or participants already exist. Each card shows only its name, type
-label, and description. Do **not** display learner, participant, occupancy, or
-online counts.
+These rooms are honest prototype contexts, not claims that courses or
+participants already exist. Each directory card shows its name, type label,
+description, and the explicit state **Empty room**. Do **not** display learner,
+participant, occupancy, or online counts. Each card links to a real route where
+the user can enter the empty room and run their own local focus timer.
 
 | Card name | Type label | Description |
 |---|---|---|
@@ -100,6 +106,7 @@ Explicitly **not** built in this Alpha (deferred to future phases):
 
 - Real-time room presence / actual multi-user rooms
 - Database of any kind (Supabase or otherwise)
+- Treating localStorage records as on-chain proof or reputation
 - User profiles beyond a connected wallet address
 - Booking / scheduling system
 - Video calls
@@ -108,6 +115,20 @@ Explicitly **not** built in this Alpha (deferred to future phases):
 - Dark mode, multi-language (this Alpha is light-mode, English-only by scope decision)
 - Any fabricated data: fake online counts, fake bookings, fake social proof
 
+## Local Prototype State
+
+The frontend may use browser `localStorage` for two narrowly scoped pieces of
+state before the contract phase:
+
+1. One active room session with its genuinely accumulated visible-room time.
+2. Session records created only after that timer reaches 30 minutes.
+
+This is not a backend and must never be presented as blockchain data. Dashboard
+labels these entries **Local demo records**. Navigating away from the active
+room or hiding the tab pauses accumulation; elapsed wall-clock time alone does
+not qualify. A user may complete multiple eligible sessions per day, including
+in different rooms.
+
 ## Technical Architecture
 
 ```
@@ -115,7 +136,11 @@ Explicitly **not** built in this Alpha (deferred to future phases):
 │      Next.js Frontend        │
 │  (TypeScript, Tailwind CSS)  │
 │                               │
-│  Landing → Wallet → Rooms    │
+│ Home → Explain → Rooms →     │
+│ Room Timer → Dashboard       │
+│                               │
+│ localStorage: honest local   │
+│ timer + demo record state    │
 └──────────────┬────────────────┘
                │ wagmi + viem
                ▼
@@ -134,8 +159,10 @@ Explicitly **not** built in this Alpha (deferred to future phases):
 └─────────────────────────────┘
 ```
 
-No backend server, no database. The only persistent state in this Alpha
-lives on-chain, inside the contract's `mapping(address => uint256)`.
+No backend server and no database. Before Phase 3, only clearly labelled local
+demo session state persists in the browser. The only **portable/verifiable**
+persistent state lives on-chain inside the contract's
+`mapping(address => uint256)`.
 
 ## Smart Contract Purpose
 
