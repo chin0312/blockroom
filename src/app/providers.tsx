@@ -10,6 +10,7 @@ import { injectedWallet } from "@rainbow-me/rainbowkit/wallets";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createConfig, http, WagmiProvider } from "wagmi";
 import { monadTestnet } from "wagmi/chains";
+import { SessionProvider } from "@/components/session-provider";
 
 const metaMaskExtensionWallet = () => ({
   ...injectedWallet(),
@@ -61,7 +62,7 @@ export function Providers({ children }: { children: ReactNode }) {
             overlayBlur: "small",
           })}
         >
-          {children}
+          <SessionProvider>{children}</SessionProvider>
         </RainbowKitProvider>
       </QueryClientProvider>
     </WagmiProvider>
