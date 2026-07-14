@@ -16,8 +16,8 @@ const steps = [
     title: "Choose a context",
     short: "Room",
     icon: "group" as IconName,
-    description: "Pick a learning, co-working, or hackathon room. Every prototype room begins empty.",
-    signal: "Room type + honest state",
+    description: "Pick a room and explicitly join its presence channel. Only connected wallets that join become visible.",
+    signal: "Real joined wallet presence",
   },
   {
     title: "Accumulate focus time",
@@ -27,18 +27,18 @@ const steps = [
     signal: "Visible-room seconds",
   },
   {
-    title: "Create a local record",
+    title: "Create wallet activity",
     short: "Local proof",
     icon: "check" as IconName,
-    description: "After 30 minutes, completion creates a real local browser record for this MVP demo.",
-    signal: "Timestamp + duration + room",
+    description: "After 30 minutes, completion creates a wallet-scoped record in this browser and updates the Dashboard.",
+    signal: "Wallet + timestamp + duration + room",
   },
   {
-    title: "Write on-chain in Phase 3",
-    short: "Monad",
-    icon: "cube" as IconName,
-    description: "The eligible action will call checkIn(), wait for confirmation, then refresh the real contract count.",
-    signal: "Transaction receipt + count",
+    title: "Sign a demo badge",
+    short: "Signature",
+    icon: "shield" as IconName,
+    description: "Eligible badges request a real wallet message signature. The signed receipt stays local and is not an NFT.",
+    signal: "Wallet signature + local receipt",
   },
 ];
 

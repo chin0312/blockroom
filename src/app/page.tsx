@@ -10,8 +10,8 @@ export default function HomePage() {
           <span className="section-label">Web3 co-learning, without invented activity</span>
           <h1>Focus together.<br />Keep the proof.</h1>
           <p>
-            BlockRoom turns an empty digital room into a focused session, then
-            gives eligible effort a path toward an on-chain record.
+            Join a real-time focus room, stay visibly present for 30 minutes,
+            and keep an honest activity record tied to your wallet.
           </p>
           <div className="hero-actions">
             <Link className="button button-primary" href="/rooms">
@@ -23,8 +23,8 @@ export default function HomePage() {
 
         <div className="product-preview" aria-label="BlockRoom product preview">
           <div className="preview-header">
-            <span>ROOM / ACTIVE CONTEXT</span>
-            <span className="empty-pill"><Icon name="empty" size={14} /> Empty room</span>
+            <span>ROOM / REALTIME CONTEXT</span>
+            <span className="open-pill">Join to load presence</span>
           </div>
           <div className="preview-main">
             <div className="preview-room-map" aria-hidden="true">
@@ -42,8 +42,8 @@ export default function HomePage() {
             </div>
           </div>
           <div className="preview-footer">
-            <span><i className="truth-dot" /> Honest empty state</span>
-            <span>Local timer → Monad in Phase 3</span>
+            <span><i className="truth-dot" /> Real members only</span>
+            <span>Local record after 30:00</span>
           </div>
         </div>
       </section>

@@ -19,8 +19,8 @@ const concepts = [
     icon: "group" as IconName,
     title: "A room is a context, not a crowd counter.",
     description:
-      "Prototype rooms define the kind of work you want to do. They begin empty and become useful when you start your own focus session.",
-    points: ["Empty state by default", "Multiple room types", "No fake participants"],
+      "Rooms are real-time contexts. Presence appears only after a connected wallet explicitly joins, and disappears when that client leaves.",
+    points: ["Supabase Presence", "Live status controls", "No fake participants"],
   },
   {
     id: "proof",
@@ -28,8 +28,8 @@ const concepts = [
     icon: "shield" as IconName,
     title: "Time first. Proof second.",
     description:
-      "A session must accumulate 30 visible minutes in its room before completion unlocks. Phase 3 will attach that eligible action to the contract.",
-    points: ["Visible-room time only", "Many sessions per day", "Local and on-chain records stay distinct"],
+      "A session must accumulate 30 visible minutes in its joined room before completion unlocks and Dashboard activity changes.",
+    points: ["Visible-room time only", "Many sessions per day", "Browser-local records are labelled local"],
   },
 ];
 

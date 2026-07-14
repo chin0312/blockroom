@@ -7,11 +7,11 @@ export default function RoomsPage() {
         <span className="page-code">03 / ROOMS</span>
         <div>
           <span className="section-label">Choose a focus context</span>
-          <h1>Four rooms.<br />Zero fake crowds.</h1>
+          <h1>Choose your<br />focus context.</h1>
         </div>
         <p>
-          Each room is currently empty and interactive. Enter one to start your
-          own 30-minute focus session; no participants are simulated.
+          Enter a room to load its real presence channel. People appear only
+          after a connected wallet explicitly joins.
         </p>
       </header>
       <RoomDirectory />

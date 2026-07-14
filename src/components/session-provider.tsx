@@ -2,6 +2,7 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -9,10 +10,11 @@ import {
   type ReactNode,
 } from "react";
 
-const STORAGE_KEY = "blockroom-session-state-v1";
+const STORAGE_KEY = "blockroom-activity-v2";
 export const REQUIRED_SESSION_SECONDS = 30 * 60;
 
 export type ActiveSession = {
+  walletAddress: string;
   roomSlug: string;
   startedAt: string;
   elapsedSeconds: number;
@@ -21,6 +23,7 @@ export type ActiveSession = {
 
 export type SessionRecord = {
   id: string;
+  walletAddress: string;
   roomSlug: string;
   startedAt: string;
   completedAt: string;
@@ -28,122 +31,246 @@ export type SessionRecord = {
   source: "local";
 };
 
-type StoredState = {
-  activeSession: ActiveSession | null;
-  records: SessionRecord[];
+export type BadgeClaim = {
+  id: string;
+  walletAddress: string;
+  level: 1 | 2;
+  claimedAt: string;
+  signature: string;
+  source: "signed-local-demo";
 };
 
-type SessionContextValue = StoredState & {
+type ActivityState = {
+  activeSessions: Record<string, ActiveSession>;
+  records: SessionRecord[];
+  badgeClaims: BadgeClaim[];
+};
+
+type SessionContextValue = ActivityState & {
   hydrated: boolean;
-  startSession: (roomSlug: string) => void;
-  pauseSession: () => void;
-  resumeSession: () => void;
-  tickSession: (roomSlug: string) => void;
-  cancelSession: () => void;
-  completeSession: () => boolean;
+  getActiveSession: (walletAddress?: string) => ActiveSession | null;
+  getRecords: (walletAddress?: string) => SessionRecord[];
+  getBadgeClaims: (walletAddress?: string) => BadgeClaim[];
+  startSession: (roomSlug: string, walletAddress: string) => void;
+  pauseSession: (walletAddress: string) => void;
+  resumeSession: (walletAddress: string) => void;
+  tickSession: (roomSlug: string, walletAddress: string) => void;
+  cancelSession: (walletAddress: string) => void;
+  completeSession: (walletAddress: string) => SessionRecord | null;
+  saveBadgeClaim: (claim: BadgeClaim) => void;
+};
+
+const EMPTY_STATE: ActivityState = {
+  activeSessions: {},
+  records: [],
+  badgeClaims: [],
 };
 
 const SessionContext = createContext<SessionContextValue | null>(null);
 
-function isStoredState(value: unknown): value is StoredState {
-  if (!value || typeof value !== "object") return false;
-  const candidate = value as Partial<StoredState>;
-  return Array.isArray(candidate.records) &&
-    (candidate.activeSession === null || typeof candidate.activeSession === "object");
+function normalizeAddress(address: string) {
+  return address.toLowerCase();
+}
+
+function readState(raw: string | null): ActivityState {
+  if (!raw) return EMPTY_STATE;
+  try {
+    const parsed = JSON.parse(raw) as Partial<ActivityState>;
+    return {
+      activeSessions:
+        parsed.activeSessions && typeof parsed.activeSessions === "object"
+          ? parsed.activeSessions
+          : {},
+      records: Array.isArray(parsed.records)
+        ? parsed.records.filter((record) => Boolean(record?.walletAddress))
+        : [],
+      badgeClaims: Array.isArray(parsed.badgeClaims)
+        ? parsed.badgeClaims.filter((claim) => Boolean(claim?.walletAddress))
+        : [],
+    };
+  } catch {
+    return EMPTY_STATE;
+  }
 }
 
 export function SessionProvider({ children }: { children: ReactNode }) {
-  const [activeSession, setActiveSession] = useState<ActiveSession | null>(null);
-  const [records, setRecords] = useState<SessionRecord[]>([]);
+  const [state, setState] = useState<ActivityState>(EMPTY_STATE);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-
     queueMicrotask(() => {
       if (cancelled) return;
-      try {
-        const stored = window.localStorage.getItem(STORAGE_KEY);
-        if (stored) {
-          const parsed: unknown = JSON.parse(stored);
-          if (isStoredState(parsed)) {
-            setActiveSession(parsed.activeSession);
-            setRecords(parsed.records);
-          }
-        }
-      } catch {
-        window.localStorage.removeItem(STORAGE_KEY);
-      } finally {
-        setHydrated(true);
-      }
+      setState(readState(window.localStorage.getItem(STORAGE_KEY)));
+      setHydrated(true);
     });
 
+    function handleStorage(event: StorageEvent) {
+      if (event.key === STORAGE_KEY) setState(readState(event.newValue));
+    }
+
+    window.addEventListener("storage", handleStorage);
     return () => {
       cancelled = true;
+      window.removeEventListener("storage", handleStorage);
     };
   }, []);
 
   useEffect(() => {
     if (!hydrated) return;
-    window.localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({ activeSession, records }),
-    );
-  }, [activeSession, hydrated, records]);
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }, [hydrated, state]);
+
+  const getActiveSession = useCallback(
+    (walletAddress?: string) =>
+      walletAddress
+        ? state.activeSessions[normalizeAddress(walletAddress)] ?? null
+        : null,
+    [state.activeSessions],
+  );
+
+  const getRecords = useCallback(
+    (walletAddress?: string) => {
+      if (!walletAddress) return [];
+      const normalized = normalizeAddress(walletAddress);
+      return state.records.filter(
+        (record) => normalizeAddress(record.walletAddress) === normalized,
+      );
+    },
+    [state.records],
+  );
+
+  const getBadgeClaims = useCallback(
+    (walletAddress?: string) => {
+      if (!walletAddress) return [];
+      const normalized = normalizeAddress(walletAddress);
+      return state.badgeClaims.filter(
+        (claim) => normalizeAddress(claim.walletAddress) === normalized,
+      );
+    },
+    [state.badgeClaims],
+  );
 
   const value = useMemo<SessionContextValue>(
     () => ({
-      activeSession,
-      records,
+      ...state,
       hydrated,
-      startSession(roomSlug) {
-        setActiveSession({
-          roomSlug,
-          startedAt: new Date().toISOString(),
-          elapsedSeconds: 0,
-          paused: false,
+      getActiveSession,
+      getRecords,
+      getBadgeClaims,
+      startSession(roomSlug, walletAddress) {
+        const normalized = normalizeAddress(walletAddress);
+        setState((current) => ({
+          ...current,
+          activeSessions: {
+            ...current.activeSessions,
+            [normalized]: {
+              walletAddress: normalized,
+              roomSlug,
+              startedAt: new Date().toISOString(),
+              elapsedSeconds: 0,
+              paused: false,
+            },
+          },
+        }));
+      },
+      pauseSession(walletAddress) {
+        const normalized = normalizeAddress(walletAddress);
+        setState((current) => {
+          const session = current.activeSessions[normalized];
+          if (!session || session.paused) return current;
+          return {
+            ...current,
+            activeSessions: {
+              ...current.activeSessions,
+              [normalized]: { ...session, paused: true },
+            },
+          };
         });
       },
-      pauseSession() {
-        setActiveSession((current) =>
-          current ? { ...current, paused: true } : current,
-        );
+      resumeSession(walletAddress) {
+        const normalized = normalizeAddress(walletAddress);
+        setState((current) => {
+          const session = current.activeSessions[normalized];
+          if (!session || !session.paused) return current;
+          return {
+            ...current,
+            activeSessions: {
+              ...current.activeSessions,
+              [normalized]: { ...session, paused: false },
+            },
+          };
+        });
       },
-      resumeSession() {
-        setActiveSession((current) =>
-          current ? { ...current, paused: false } : current,
-        );
-      },
-      tickSession(roomSlug) {
-        setActiveSession((current) => {
-          if (!current || current.roomSlug !== roomSlug || current.paused) {
+      tickSession(roomSlug, walletAddress) {
+        const normalized = normalizeAddress(walletAddress);
+        setState((current) => {
+          const session = current.activeSessions[normalized];
+          if (!session || session.roomSlug !== roomSlug || session.paused) {
             return current;
           }
-          return { ...current, elapsedSeconds: current.elapsedSeconds + 1 };
+          return {
+            ...current,
+            activeSessions: {
+              ...current.activeSessions,
+              [normalized]: {
+                ...session,
+                elapsedSeconds: session.elapsedSeconds + 1,
+              },
+            },
+          };
         });
       },
-      cancelSession() {
-        setActiveSession(null);
+      cancelSession(walletAddress) {
+        const normalized = normalizeAddress(walletAddress);
+        setState((current) => {
+          const activeSessions = { ...current.activeSessions };
+          delete activeSessions[normalized];
+          return { ...current, activeSessions };
+        });
       },
-      completeSession() {
-        if (!activeSession || activeSession.elapsedSeconds < REQUIRED_SESSION_SECONDS) {
-          return false;
+      completeSession(walletAddress) {
+        const normalized = normalizeAddress(walletAddress);
+        const session = state.activeSessions[normalized];
+        if (!session || session.elapsedSeconds < REQUIRED_SESSION_SECONDS) {
+          return null;
         }
 
         const record: SessionRecord = {
           id: crypto.randomUUID(),
-          roomSlug: activeSession.roomSlug,
-          startedAt: activeSession.startedAt,
+          walletAddress: normalized,
+          roomSlug: session.roomSlug,
+          startedAt: session.startedAt,
           completedAt: new Date().toISOString(),
-          durationSeconds: activeSession.elapsedSeconds,
+          durationSeconds: session.elapsedSeconds,
           source: "local",
         };
-        setRecords((current) => [record, ...current]);
-        setActiveSession(null);
-        return true;
+        setState((current) => {
+          const activeSessions = { ...current.activeSessions };
+          delete activeSessions[normalized];
+          return {
+            ...current,
+            activeSessions,
+            records: [record, ...current.records],
+          };
+        });
+        return record;
+      },
+      saveBadgeClaim(claim) {
+        setState((current) => {
+          const duplicate = current.badgeClaims.some(
+            (item) =>
+              normalizeAddress(item.walletAddress) ===
+                normalizeAddress(claim.walletAddress) &&
+              item.level === claim.level,
+          );
+          return duplicate
+            ? current
+            : { ...current, badgeClaims: [claim, ...current.badgeClaims] };
+        });
       },
     }),
-    [activeSession, hydrated, records],
+    [getActiveSession, getBadgeClaims, getRecords, hydrated, state],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
@@ -151,8 +278,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
 export function useSession() {
   const context = useContext(SessionContext);
-  if (!context) {
-    throw new Error("useSession must be used inside SessionProvider");
-  }
+  if (!context) throw new Error("useSession must be used inside SessionProvider");
   return context;
 }

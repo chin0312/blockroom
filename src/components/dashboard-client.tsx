@@ -1,15 +1,41 @@
 "use client";
 
 import Link from "next/link";
+import {
+  ArrowRight,
+  Clock,
+  Flame,
+  SealCheck,
+  Wallet,
+} from "@phosphor-icons/react";
 import { useAccount } from "wagmi";
 import { getRoom } from "@/lib/rooms";
-import { Icon } from "./icons";
+import { BadgeSection } from "./BadgeSection";
+import { ContributionGraph } from "./ContributionGraph";
 import { useSession } from "./session-provider";
 
-function formatDuration(seconds: number) {
-  const minutes = Math.floor(seconds / 60);
-  const remainder = seconds % 60;
-  return `${minutes}m ${String(remainder).padStart(2, "0")}s`;
+function formatFocus(seconds: number) {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  return hours ? `${hours}h ${minutes}m` : `${minutes} min`;
+}
+
+function localDateKey(value: string | Date) {
+  const date = typeof value === "string" ? new Date(value) : value;
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function currentStreak(completedAt: string[]) {
+  if (!completedAt.length) return 0;
+  const days = new Set(completedAt.map(localDateKey));
+  const cursor = new Date();
+  if (!days.has(localDateKey(cursor))) cursor.setDate(cursor.getDate() - 1);
+  let streak = 0;
+  while (days.has(localDateKey(cursor))) {
+    streak += 1;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return streak;
 }
 
 function formatDate(value: string) {
@@ -21,101 +47,60 @@ function formatDate(value: string) {
 
 export function DashboardClient() {
   const { address, chain, isConnected } = useAccount();
-  const { activeSession, records, hydrated, cancelSession } = useSession();
+  const {
+    hydrated,
+    getActiveSession,
+    getRecords,
+    getBadgeClaims,
+    cancelSession,
+    saveBadgeClaim,
+  } = useSession();
+  const activeSession = getActiveSession(address);
+  const records = getRecords(address);
+  const claims = getBadgeClaims(address);
   const activeRoom = activeSession ? getRoom(activeSession.roomSlug) : undefined;
-  const totalMinutes = Math.floor(records.reduce((sum, record) => sum + record.durationSeconds, 0) / 60);
+  const totalSeconds = records.reduce((sum, record) => sum + record.durationSeconds, 0);
+  const streak = currentStreak(records.map((record) => record.completedAt));
+
+  if (!hydrated) return <div className="dashboard-loading" aria-label="Loading local wallet activity" />;
 
   return (
-    <div className="dashboard-grid">
-      <section className="dashboard-card identity-dashboard-card">
-        <span className="card-label">Wallet identity</span>
-        <div className="identity-orb"><Icon name="wallet" size={30} /></div>
-        <h2>{isConnected && address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "Not connected"}</h2>
-        <p>{isConnected ? chain?.name ?? "Network unavailable" : "Connect MetaMask from the navigation to establish identity."}</p>
+    <div className="dashboard-product-grid">
+      <section className="dashboard-identity-panel">
+        <div className="identity-protocol" aria-hidden="true"><Wallet size={34} weight="light" /><span /></div>
+        <div><span>Wallet identity</span><h2>{isConnected && address ? `${address.slice(0, 6)}...${address.slice(-4)}` : "Not connected"}</h2><p>{isConnected ? chain?.name ?? "Network unavailable" : "Connect a wallet to load its local activity."}</p></div>
       </section>
 
-      <section className="dashboard-card stat-dashboard-card">
-        <span className="card-label">Local demo records</span>
-        <strong>{hydrated ? records.length : "—"}</strong>
-        <p>Eligible sessions completed in this browser</p>
-      </section>
+      <div className="dashboard-stats">
+        <article><Clock size={23} /><span>Total Focus Time</span><strong>{isConnected ? formatFocus(totalSeconds) : "Connect wallet"}</strong></article>
+        <article><Flame size={23} /><span>Current Streak</span><strong>{isConnected ? `${streak} ${streak === 1 ? "day" : "days"}` : "Connect wallet"}</strong></article>
+        <article><SealCheck size={23} /><span>Total Badges Earned</span><strong>{isConnected ? claims.length : "Connect wallet"}</strong></article>
+      </div>
 
-      <section className="dashboard-card stat-dashboard-card accent-surface">
-        <span className="card-label">Recorded focus</span>
-        <strong>{hydrated ? totalMinutes : "—"}<small> min</small></strong>
-        <p>Actual qualifying local session time</p>
-      </section>
+      <ContributionGraph records={records} />
 
-      <section className="dashboard-card active-session-card">
-        <div className="card-heading-row">
-          <div>
-            <span className="card-label">Current session</span>
-            <h2>{activeRoom?.name ?? "No active session"}</h2>
-          </div>
-          <Icon name="timer" size={28} />
-        </div>
-        {activeSession && activeRoom ? (
-          <>
-            <div className="active-session-metric">
-              <strong>{formatDuration(activeSession.elapsedSeconds)}</strong>
-              <span>{activeSession.paused ? "Manually paused" : "Paused outside its room"}</span>
-            </div>
-            <div className="dashboard-actions">
-              <Link className="button button-primary" href={`/rooms/${activeRoom.slug}`}>Return to room</Link>
-              <button className="button button-quiet" type="button" onClick={cancelSession}>Cancel</button>
-            </div>
-          </>
-        ) : (
-          <div className="dashboard-empty-inline">
-            <p>Enter an empty room and start a timer when you are ready to focus.</p>
-            <Link className="text-link" href="/rooms">Browse rooms <Icon name="arrow" size={17} /></Link>
-          </div>
-        )}
-      </section>
-
-      <section className="dashboard-card records-card">
-        <div className="card-heading-row">
-          <div>
-            <span className="card-label">Session history</span>
-            <h2>Local records</h2>
-          </div>
-          <span className="local-badge">Not on-chain</span>
-        </div>
+      <section className="activity-panel">
+        <div className="dashboard-section-heading"><div><span>Local activity</span><h2>Completed sessions</h2></div><strong>{records.length}</strong></div>
         {records.length ? (
-          <div className="record-list">
-            {records.map((record) => {
+          <div className="activity-list">
+            {records.slice(0, 8).map((record) => {
               const room = getRoom(record.roomSlug);
-              return (
-                <article className="record-row" key={record.id}>
-                  <span className="record-icon"><Icon name="check" size={18} /></span>
-                  <div><h3>{room?.name ?? "Room"}</h3><p>{formatDate(record.completedAt)}</p></div>
-                  <strong>{formatDuration(record.durationSeconds)}</strong>
-                </article>
-              );
+              return <article key={record.id}><span className="activity-signal" /><div><h3>{room?.name ?? "Room"}</h3><p>{formatDate(record.completedAt)}</p></div><strong>{formatFocus(record.durationSeconds)}</strong></article>;
             })}
           </div>
         ) : (
-          <div className="records-empty">
-            <span className="empty-symbol"><Icon name="empty" size={30} /></span>
-            <h3>No completed sessions yet</h3>
-            <p>A record appears only after 30 minutes of real visible-room time.</p>
-          </div>
+          <div className="activity-empty"><Clock size={30} /><h3>No completed sessions</h3><p>A record appears only after 30 minutes of real visible-room time.</p><Link href="/rooms">Browse rooms <ArrowRight size={17} /></Link></div>
         )}
       </section>
 
-      <section className="dashboard-card onchain-card">
-        <span className="card-label">On-chain reputation</span>
-        <div className="chain-diagram" aria-hidden="true">
-          <span><Icon name="check" size={20} /></span><i /><span><Icon name="cube" size={24} /></span><i /><span><Icon name="shield" size={20} /></span>
-        </div>
-        <h2>Contract connection comes in Phase 3.</h2>
-        <p>
-          Local records above prove the interaction flow only. They are not
-          reputation. A real Monad transaction and contract read will replace
-          this empty state after deployment.
-        </p>
-        <button className="button button-primary" type="button" disabled>On-chain check-in unavailable</button>
+      <section className="active-session-panel">
+        <div className="dashboard-section-heading"><div><span>Current session</span><h2>{activeRoom?.name ?? "No active session"}</h2></div><Clock size={27} /></div>
+        {activeSession && activeRoom && address ? (
+          <div className="active-session-detail"><strong>{formatFocus(activeSession.elapsedSeconds)}</strong><p>{activeSession.paused ? "Paused outside the visible room." : "Ready to continue in the room."}</p><div><Link href={`/rooms/${activeRoom.slug}`}>Return to room</Link><button type="button" onClick={() => cancelSession(address)}>Discard</button></div></div>
+        ) : <p className="active-session-empty">Start a session inside a joined room. No example timer is shown here.</p>}
       </section>
+
+      <BadgeSection address={address} completionCount={records.length} claims={claims} onClaim={saveBadgeClaim} />
     </div>
   );
 }

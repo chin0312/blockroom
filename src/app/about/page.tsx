@@ -14,7 +14,7 @@ export default function AboutPage() {
         <p>
           BlockRoom is an interactive prototype for co-learning and
           body-doubling. It separates what is real now from what will become
-          verifiable on-chain later.
+          visible to collaborators now and recorded honestly in this browser.
         </p>
       </header>
       <AboutExplorer />

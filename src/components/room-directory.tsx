@@ -35,7 +35,7 @@ export function RoomDirectory() {
             <div className="directory-content">
               <div className="directory-meta">
                 <span className="type-pill">{room.type}</span>
-                <span className="empty-pill"><Icon name="empty" size={15} /> Empty room</span>
+                <span className="open-pill">Join to view live presence</span>
               </div>
               <span className="room-index">R-{String(index + 1).padStart(2, "0")}</span>
               <h2>{room.name}</h2>

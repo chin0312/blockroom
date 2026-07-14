@@ -6,9 +6,9 @@ import { SiteHeader } from "@/components/site-header";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
-  title: "BlockRoom — Learn and build on-chain",
+  title: "BlockRoom | Focus together, prove the time",
   description:
-    "A Web3 co-learning prototype where your wallet is your identity and completed sessions become verifiable on-chain check-ins.",
+    "A real-time Web3 co-learning space with wallet presence, visible-time sessions, and honest local activity records.",
 };
 
 export default function RootLayout({
