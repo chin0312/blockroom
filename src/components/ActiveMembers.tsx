@@ -1,8 +1,11 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import {
   MicrophoneSlash,
   MonitorArrowUp,
+  PushPin,
+  PushPinSlash,
   UserCircle,
   VideoCamera,
 } from "@phosphor-icons/react";
@@ -29,12 +32,86 @@ function StreamPlayer({ stream, muted, video }: { stream: MediaStream; muted: bo
   return <video ref={connectStream} autoPlay muted={muted} playsInline />;
 }
 
+function MemberTile({
+  member,
+  stream,
+  isCurrent,
+  isPinned,
+  primary,
+  onPin,
+}: {
+  member: RoomMember;
+  stream?: MediaStream | null;
+  isCurrent: boolean;
+  isPinned: boolean;
+  primary?: boolean;
+  onPin: () => void;
+}) {
+  const hasVideo = Boolean(stream && (member.cameraOn || member.sharing));
+  return (
+    <article className={`meeting-tile${primary ? " primary" : ""}${member.sharing ? " sharing" : ""}`}>
+      <div className="meeting-media">
+        {stream && hasVideo ? (
+          <StreamPlayer stream={stream} muted={isCurrent} video />
+        ) : (
+          <div className={`meeting-avatar avatar-${member.avatar ?? "violet"}`} aria-label="Camera off">
+            <UserCircle size={primary ? 74 : 48} weight="light" />
+          </div>
+        )}
+        {stream && !hasVideo && !isCurrent && <StreamPlayer stream={stream} muted={false} video={false} />}
+        <button
+          type="button"
+          className="pin-control"
+          onClick={onPin}
+          aria-label={`${isPinned ? "Unpin" : "Pin"} ${shortAddress(member.address)}`}
+          title={isPinned ? "Return to grid" : "Pin to main stage"}
+        >
+          {isPinned ? <PushPinSlash size={18} /> : <PushPin size={18} />}
+          <span>{isPinned ? "Unpin" : "Pin"}</span>
+        </button>
+        {member.sharing && <span className="share-label"><MonitorArrowUp size={15} /> Screen sharing</span>}
+        <span className={`member-state ${member.status}`} aria-label={statusLabel[member.status]} />
+      </div>
+      <footer className="meeting-tile-footer">
+        <div>
+          <strong>{shortAddress(member.address)}</strong>
+          {isCurrent && <span className="you-label">You</span>}
+          <span>{statusLabel[member.status]}</span>
+        </div>
+        <div className="member-signals" aria-label="Member media status">
+          {member.muted && <span title="Microphone muted"><MicrophoneSlash size={16} /></span>}
+          {member.cameraOn && <span title="Camera on"><VideoCamera size={16} /></span>}
+          {member.sharing && <span className="sharing" title="Sharing screen"><MonitorArrowUp size={16} /></span>}
+        </div>
+      </footer>
+    </article>
+  );
+}
+
 export function ActiveMembers({
   members,
   currentClientId,
   localStream,
   remoteStreams = {},
 }: ActiveMembersProps) {
+  const [pinnedClientId, setPinnedClientId] = useState<string | null>(null);
+  const previousSharingRef = useRef<string | null>(null);
+  const sharingMember = members.find((member) => member.sharing);
+
+  useEffect(() => {
+    if (pinnedClientId && !members.some((member) => member.clientId === pinnedClientId)) {
+      queueMicrotask(() => setPinnedClientId(null));
+    }
+  }, [members, pinnedClientId]);
+
+  useEffect(() => {
+    const sharingId = sharingMember?.clientId ?? null;
+    if (sharingId && sharingId !== previousSharingRef.current && !pinnedClientId) {
+      queueMicrotask(() => setPinnedClientId(sharingId));
+    }
+    previousSharingRef.current = sharingId;
+  }, [pinnedClientId, sharingMember?.clientId]);
+
   if (!members.length) {
     return (
       <div className="members-empty">
@@ -45,39 +122,35 @@ export function ActiveMembers({
     );
   }
 
+  const pinnedMember = members.find((member) => member.clientId === pinnedClientId);
+  const streamFor = (member: RoomMember) =>
+    member.clientId === currentClientId ? localStream : remoteStreams[member.clientId];
+  const renderTile = (member: RoomMember, primary = false) => (
+    <MemberTile
+      key={member.clientId}
+      member={member}
+      stream={streamFor(member)}
+      isCurrent={member.clientId === currentClientId}
+      isPinned={member.clientId === pinnedClientId}
+      primary={primary}
+      onPin={() => setPinnedClientId((current) => current === member.clientId ? null : member.clientId)}
+    />
+  );
+
+  if (pinnedMember) {
+    return (
+      <div className={`meeting-stage has-pin${members.length === 1 ? " solo-pin" : ""}`} aria-live="polite">
+        <div className="meeting-primary">{renderTile(pinnedMember, true)}</div>
+        <div className="meeting-filmstrip" aria-label="Other room members">
+          {members.filter((member) => member.clientId !== pinnedMember.clientId).map((member) => renderTile(member))}
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="members-grid" aria-live="polite">
-      {members.map((member) => {
-        const isCurrent = member.clientId === currentClientId;
-        const stream = isCurrent ? localStream : remoteStreams[member.clientId];
-        const hasVideo = Boolean(stream && (member.cameraOn || member.sharing));
-        return <article
-          className={member.clientId === currentClientId ? "member-card current" : "member-card"}
-          key={member.clientId}
-        >
-          <div className={hasVideo ? `member-module has-media${member.sharing ? " screen-media" : ""}` : "member-module"} aria-hidden={!hasVideo}>
-            {stream && hasVideo ? (
-              <StreamPlayer stream={stream} muted={isCurrent} video />
-            ) : (
-              <UserCircle size={38} weight="light" />
-            )}
-            <span className={`member-state ${member.status}`} />
-          </div>
-          {stream && !hasVideo && !isCurrent && <StreamPlayer stream={stream} muted={false} video={false} />}
-          <div className="member-identity">
-            <div>
-              <strong>{shortAddress(member.address)}</strong>
-              {member.clientId === currentClientId && <span className="you-label">You</span>}
-            </div>
-            <span>{statusLabel[member.status]}</span>
-          </div>
-          <div className="member-signals" aria-label="Member controls status">
-            {member.muted && <span title="Microphone muted"><MicrophoneSlash size={16} /></span>}
-            {member.cameraOn && <span title="Camera on"><VideoCamera size={16} /></span>}
-            {member.sharing && <span className="sharing" title="Sharing Proof of Work"><MonitorArrowUp size={16} /></span>}
-          </div>
-        </article>;
-      })}
+    <div className={`meeting-stage meeting-grid count-${members.length}`} aria-live="polite">
+      {members.map((member) => renderTile(member))}
     </div>
   );
 }

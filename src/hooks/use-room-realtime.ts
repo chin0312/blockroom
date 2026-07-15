@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient, type RealtimeChannel } from "@supabase/supabase-js";
+import { getAvatarVariant, PROFILE_UPDATED_EVENT, type AvatarVariant } from "@/lib/profile";
 import type {
   LobbyMember,
   RealtimeMode,
@@ -114,7 +115,7 @@ export function useRoomRealtime(roomSlug: string, address?: string, capacity = 6
   }, [mode, publishLocal, roomSlug]);
 
   const updateMember = useCallback(
-    async (updates: Partial<Pick<RoomMember, "status" | "muted" | "sharing" | "cameraOn">>) => {
+    async (updates: Partial<Pick<RoomMember, "status" | "muted" | "sharing" | "cameraOn" | "avatar">>) => {
       const member = memberRef.current;
       if (!member) return;
       const next = { ...member, ...updates, updatedAt: new Date().toISOString() };
@@ -143,6 +144,7 @@ export function useRoomRealtime(roomSlug: string, address?: string, capacity = 6
       muted: true,
       sharing: false,
       cameraOn: false,
+      avatar: getAvatarVariant(address),
       joinedAt: now,
       updatedAt: now,
     };
@@ -301,6 +303,18 @@ export function useRoomRealtime(roomSlug: string, address?: string, capacity = 6
       cancelled = true;
     };
   }, [address, joined, leave]);
+
+  useEffect(() => {
+    if (!address || !joined) return;
+    const handleProfileUpdate = (event: Event) => {
+      const detail = (event as CustomEvent<{ address: string; avatar: AvatarVariant }>).detail;
+      if (detail.address.toLowerCase() === address.toLowerCase()) {
+        void updateMember({ avatar: detail.avatar });
+      }
+    };
+    window.addEventListener(PROFILE_UPDATED_EVENT, handleProfileUpdate);
+    return () => window.removeEventListener(PROFILE_UPDATED_EVENT, handleProfileUpdate);
+  }, [address, joined, updateMember]);
 
   useEffect(() => {
     function handlePageHide() {

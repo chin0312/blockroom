@@ -23,14 +23,14 @@ const steps = [
     title: "Accumulate focus time",
     short: "30 minutes",
     icon: "timer" as IconName,
-    description: "Start the timer. It advances only while the matching room page is open and the tab is visible.",
+    description: "Joining starts the timer automatically. It advances only while the matching room page is open and the tab is visible.",
     signal: "Visible-room seconds",
   },
   {
     title: "Create wallet activity",
     short: "Local proof",
     icon: "check" as IconName,
-    description: "After 30 minutes, completion creates a wallet-scoped record in this browser and updates the Dashboard.",
+    description: "When you leave after 30 minutes, choose whether to save the exact duration as a wallet-scoped browser record.",
     signal: "Wallet + timestamp + duration + room",
   },
   {

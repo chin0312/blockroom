@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -11,7 +11,6 @@ import {
   MicrophoneSlash,
   MonitorArrowUp,
   PaperPlaneTilt,
-  Play,
   SignOut,
   UsersThree,
   VideoCamera,
@@ -44,12 +43,16 @@ export function RoomSessionPanel({ room }: { room: Room }) {
     pauseSession,
     resumeSession,
     tickSession,
+    cancelSession,
     completeSession,
   } = useSession();
   const realtime = useRoomRealtime(room.slug, address, room.capacity);
   const occupancy = useRoomOccupancy([room.slug]);
   const [activeTab, setActiveTab] = useState<"members" | "chat">("members");
   const [draft, setDraft] = useState("");
+  const [leavePromptOpen, setLeavePromptOpen] = useState(false);
+  const [leaveDestination, setLeaveDestination] = useState("/rooms");
+  const joinTimerStartedRef = useRef(false);
   const session = getActiveSession(address);
   const isCurrentRoom = session?.roomSlug === room.slug;
   const elapsed = isCurrentRoom ? session.elapsedSeconds : 0;
@@ -67,6 +70,18 @@ export function RoomSessionPanel({ room }: { room: Room }) {
   });
   const liveCount = Math.max(occupancy.counts[room.slug] ?? 0, realtime.members.length);
   const roomFull = liveCount >= room.capacity;
+
+  useEffect(() => {
+    if (!realtime.joined) {
+      joinTimerStartedRef.current = false;
+      return;
+    }
+    if (!address || joinTimerStartedRef.current) return;
+    joinTimerStartedRef.current = true;
+    if (!isCurrentRoom) startSession(room.slug, address);
+    else resumeSession(address);
+    void realtime.updateMember({ status: "focusing" });
+  }, [address, isCurrentRoom, realtime, resumeSession, room.slug, startSession]);
 
   useEffect(() => {
     if (!address || !realtime.joined || !isCurrentRoom || session.paused) return;
@@ -96,26 +111,52 @@ export function RoomSessionPanel({ room }: { room: Room }) {
     await realtime.join();
   }
 
-  function handleStart() {
-    if (!address || !realtime.joined) return;
-    startSession(room.slug, address);
-    void realtime.updateMember({ status: "focusing" });
-  }
-
-  async function handleLeave() {
+  const requestLeave = useCallback((destination = "/rooms") => {
     if (address && isCurrentRoom) pauseSession(address);
+    void realtime.updateMember({ status: "paused" });
+    setLeaveDestination(destination);
+    setLeavePromptOpen(true);
+  }, [address, isCurrentRoom, pauseSession, realtime]);
+
+  const cancelLeave = useCallback(() => {
+    if (address && isCurrentRoom) resumeSession(address);
+    void realtime.updateMember({ status: "focusing" });
+    setLeavePromptOpen(false);
+  }, [address, isCurrentRoom, realtime, resumeSession]);
+
+  async function finishLeave(save: boolean) {
+    if (address) {
+      if (save) completeSession(address);
+      else cancelSession(address);
+    }
     media.stopAllMedia();
+    setLeavePromptOpen(false);
     await realtime.leave();
-    router.push("/rooms");
+    router.push(leaveDestination);
   }
 
-  function handleComplete() {
-    if (!address) return;
-    const record = completeSession(address);
-    if (!record) return;
-    void realtime.updateMember({ status: "available" });
-    router.push("/dashboard");
-  }
+  useEffect(() => {
+    if (!realtime.joined) return;
+    const interceptInternalNavigation = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const anchor = (event.target as Element | null)?.closest("a[href]") as HTMLAnchorElement | null;
+      if (!anchor || anchor.target === "_blank" || anchor.hasAttribute("download")) return;
+      const destination = new URL(anchor.href, window.location.href);
+      if (destination.origin !== window.location.origin || destination.pathname === window.location.pathname) return;
+      event.preventDefault();
+      requestLeave(`${destination.pathname}${destination.search}${destination.hash}`);
+    };
+    const confirmBrowserExit = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    document.addEventListener("click", interceptInternalNavigation, true);
+    window.addEventListener("beforeunload", confirmBrowserExit);
+    return () => {
+      document.removeEventListener("click", interceptInternalNavigation, true);
+      window.removeEventListener("beforeunload", confirmBrowserExit);
+    };
+  }, [realtime.joined, requestLeave]);
 
   async function handleSend(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -212,26 +253,41 @@ export function RoomSessionPanel({ room }: { room: Room }) {
           <button type="button" className={me?.sharing ? "active" : ""} onClick={() => media.toggleScreenShare(Boolean(me?.sharing))}>
             <MonitorArrowUp size={19} /> {me?.sharing ? "Stop sharing" : "Share Screen"}
           </button>
-          <button type="button" className="leave" onClick={handleLeave}><SignOut size={19} /> Leave Space</button>
+          <button type="button" className="leave" onClick={() => requestLeave()}><SignOut size={19} /> Leave Space</button>
         </div>
         {media.mediaError && <div className="control-error" role="alert"><WarningCircle size={17} /> {media.mediaError}</div>}
       </div>
 
       <aside className="session-console-new">
         <div className="console-heading"><span>Session console</span><span className={`connection-state ${realtime.status}`}>{realtime.mode === "supabase" ? "Realtime" : "Local tabs"}</span></div>
-        <div className="timer-display"><strong>{formatTimer(elapsed)}</strong><span>/ 30:00</span></div>
+        <div className="timer-display"><strong>{formatTimer(elapsed)}</strong><span>in room</span></div>
         <div className="timer-progress" aria-label={`${Math.round(progress)} percent complete`}><span style={{ width: `${progress}%` }} /></div>
-        <div className="focus-state"><span className={isCurrentRoom && !session.paused ? "pulse active" : "pulse"} />{!isCurrentRoom ? "Timer not started" : session.paused ? "Paused while hidden" : "Visible time counting"}</div>
-        <div className="console-divider" />
-        {!isCurrentRoom ? (
-          <button className="product-button primary console-action" type="button" onClick={handleStart} disabled={Boolean(session)}><Play size={19} /> Start 30-minute session</button>
-        ) : (
-          <button className="product-button primary console-action" type="button" onClick={handleComplete} disabled={!eligible}><CheckCircle size={20} /> Complete Session</button>
-        )}
-        <p className="console-note"><ClockCountdown size={18} />{eligible ? "Eligible. Completion creates a local wallet activity record." : `${formatTimer(remaining)} of visible room time remaining.`}</p>
-        <div className="console-truth"><strong>Visible-time rule</strong><p>Switching tabs pauses both your timer and the status other members see.</p></div>
-        <button className="back-to-rooms" type="button" onClick={() => router.push("/rooms")}><ArrowLeft size={17} /> Room directory</button>
+        <div className="focus-state"><span className={isCurrentRoom && !session?.paused ? "pulse active" : "pulse"} />{session?.paused ? "Paused while hidden or leaving" : "Tracking started when you joined"}</div>
+        <p className={eligible ? "console-note eligible" : "console-note"}><ClockCountdown size={18} />{eligible ? `Eligible to save ${formatTimer(elapsed)} when you leave.` : `${formatTimer(remaining)} of visible room time until this session can be saved.`}</p>
+        <div className="console-truth"><strong>Automatic session</strong><p>No start or complete action is needed. Leave the room to decide whether to save the real accumulated time.</p></div>
+        <button className="back-to-rooms" type="button" onClick={() => requestLeave()}><ArrowLeft size={17} /> Room directory</button>
       </aside>
+
+      {leavePromptOpen && (
+        <div className="leave-dialog-backdrop" role="presentation">
+          <section className="leave-dialog" role="dialog" aria-modal="true" aria-labelledby="leave-dialog-title">
+            <div className={eligible ? "leave-dialog-icon eligible" : "leave-dialog-icon"} aria-hidden="true">
+              {eligible ? <CheckCircle size={30} /> : <ClockCountdown size={30} />}
+            </div>
+            <h2 id="leave-dialog-title">{eligible ? "Save this focus session?" : "Leave without a record?"}</h2>
+            <p>
+              {eligible
+                ? `You accumulated ${formatTimer(elapsed)} of visible room time. Save this exact duration to your wallet activity before leaving.`
+                : `You accumulated ${formatTimer(elapsed)}. Sessions need at least 30:00 of visible room time before they can be recorded.`}
+            </p>
+            <div className="leave-dialog-actions">
+              {eligible && <button type="button" className="save" onClick={() => void finishLeave(true)}><CheckCircle size={18} /> Save and leave</button>}
+              <button type="button" className="discard" onClick={() => void finishLeave(false)}><SignOut size={18} /> Leave without saving</button>
+              <button type="button" className="cancel" onClick={cancelLeave}>Stay in room</button>
+            </div>
+          </section>
+        </div>
+      )}
     </section>
   );
 }

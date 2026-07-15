@@ -41,18 +41,19 @@ Home
 | Feature | Required behavior |
 |---|---|
 | Multi-page shell | Home, What is BlockRoom, How it works, Rooms, Room Detail, and Dashboard remain separate routes |
-| Wallet identity | Reown AppKit, wagmi, and viem with native wallet selection and network switching; email, social login, transfers, swaps, onramp, receive, and unrelated wallet history are disabled |
+| Wallet identity | Reown AppKit, wagmi, and viem with native wallet selection and network switching; the BlockRoom identity panel shows no balances or assets and disables email, social login, transfers, swaps, onramp, receive, and unrelated wallet history |
 | Supported EVM networks | Monad Testnet, Ethereum, Base, Arbitrum, Optimism, and Polygon |
 | Real-time rooms | Supabase Presence and Broadcast sync joined wallets, controls, and chat across browsers |
 | Honest fallback | Without Supabase environment variables, BroadcastChannel and localStorage support same-origin multi-tab testing and the UI says so |
 | Active members | Only connected wallets that explicitly join are shown; leave, disconnect, page close, and stale-client cleanup remove them |
 | Spatial controls | Microphone, Webcam, Share Screen, and Leave Space use real browser media tracks and publish their state |
 | Peer media | WebRTC sends live audio and the selected camera or screen track to current room peers; Supabase or BroadcastChannel carries signaling |
+| Meeting stage | Participant media uses a responsive 1-6 tile grid; any member can be pinned to a 16:9 primary stage, and a new screen share is promoted when no pin exists |
 | Room capacity | Every room has a six-member MVP capacity; the client rejects members outside the earliest six observed joins |
-| Session gate | Focus time advances only while joined on the correct visible room page; completion unlocks at 30 minutes |
-| Wallet activity | Completed sessions are stored locally under the connected wallet address; multiple completions per day are allowed |
+| Session gate | Joining starts the session automatically; visible focus time advances while joined, and leaving offers to save only after 30 minutes |
+| Wallet activity | The leave confirmation stores the exact accumulated duration locally under the connected wallet address; multiple eligible sessions per day are allowed |
 | Live chat | Messages are sent to current room members in real time and are not filled with examples |
-| Contribution graph | Current-month cells are derived only from completed local sessions for the connected wallet |
+| Contribution graph | Calendar months are derived only from that wallet's completed local sessions; each day's continuous color depth represents its accumulated duration on a 0-24 hour scale, and selecting a day reveals its exact total and saved session records |
 | Dashboard statistics | Total Focus Time, Current Streak, and Total Badges Earned are derived from that wallet's local state |
 | Demo badges | Level 1 unlocks at 1 completion and Level 2 at 5; claiming requests a real message signature and stores a local receipt |
 

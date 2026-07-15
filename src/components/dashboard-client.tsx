@@ -97,7 +97,7 @@ export function DashboardClient() {
         <div className="dashboard-section-heading"><div><span>Current session</span><h2>{activeRoom?.name ?? "No active session"}</h2></div><Clock size={27} /></div>
         {activeSession && activeRoom && address ? (
           <div className="active-session-detail"><strong>{formatFocus(activeSession.elapsedSeconds)}</strong><p>{activeSession.paused ? "Paused outside the visible room." : "Ready to continue in the room."}</p><div><Link href={`/rooms/${activeRoom.slug}`}>Return to room</Link><button type="button" onClick={() => cancelSession(address)}>Discard</button></div></div>
-        ) : <p className="active-session-empty">Start a session inside a joined room. No example timer is shown here.</p>}
+        ) : <p className="active-session-empty">Join any room to begin automatic session tracking. No example timer is shown here.</p>}
       </section>
 
       <BadgeSection

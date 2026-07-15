@@ -1,3 +1,5 @@
+import type { AvatarVariant } from "@/lib/profile";
+
 export type MemberFocusStatus = "focusing" | "paused" | "available";
 
 export type RoomMember = {
@@ -7,6 +9,7 @@ export type RoomMember = {
   muted: boolean;
   sharing: boolean;
   cameraOn: boolean;
+  avatar: AvatarVariant;
   joinedAt: string;
   updatedAt: string;
 };
