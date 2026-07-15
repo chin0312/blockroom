@@ -44,6 +44,9 @@ if (isReownConfigured) {
     },
     features: {
       analytics: false,
+      email: false,
+      socials: false,
+      connectMethodsOrder: ["wallet"],
     },
   });
 }
