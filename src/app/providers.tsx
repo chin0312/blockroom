@@ -46,6 +46,11 @@ if (isReownConfigured) {
       analytics: false,
       email: false,
       socials: false,
+      swaps: false,
+      onramp: false,
+      send: false,
+      receive: false,
+      history: false,
       connectMethodsOrder: ["wallet"],
     },
   });

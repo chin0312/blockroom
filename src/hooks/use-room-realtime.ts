@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient, type RealtimeChannel } from "@supabase/supabase-js";
 import type {
+  LobbyMember,
   RealtimeMode,
   RealtimeStatus,
+  RtcSignal,
   RoomMember,
   RoomMessage,
 } from "@/lib/realtime-types";
@@ -17,6 +19,7 @@ type LocalEvent =
   | { type: "presence"; member: RoomMember }
   | { type: "leave"; clientId: string }
   | { type: "chat"; message: RoomMessage }
+  | { type: "rtc"; signal: RtcSignal }
   | { type: "sync-request" };
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -51,10 +54,12 @@ function writeLocalMember(roomSlug: string, member: RoomMember | null, clientId:
   window.localStorage.setItem(presenceKey(roomSlug), JSON.stringify(current));
 }
 
-export function useRoomRealtime(roomSlug: string, address?: string) {
+export function useRoomRealtime(roomSlug: string, address?: string, capacity = 6) {
   const [clientId] = useState(newClientId);
   const channelRef = useRef<RealtimeChannel | null>(null);
+  const lobbyChannelRef = useRef<RealtimeChannel | null>(null);
   const localChannelRef = useRef<BroadcastChannel | null>(null);
+  const signalListenersRef = useRef(new Set<(signal: RtcSignal) => void>());
   const memberRef = useRef<RoomMember | null>(null);
   const [joined, setJoined] = useState(false);
   const [status, setStatus] = useState<RealtimeStatus>("idle");
@@ -88,9 +93,15 @@ export function useRoomRealtime(roomSlug: string, address?: string) {
 
     if (mode === "supabase" && channelRef.current) {
       const channel = channelRef.current;
+      const lobbyChannel = lobbyChannelRef.current;
       channelRef.current = null;
+      lobbyChannelRef.current = null;
       await channel.untrack();
       await channel.unsubscribe();
+      if (lobbyChannel) {
+        await lobbyChannel.untrack();
+        await lobbyChannel.unsubscribe();
+      }
     } else if (member) {
       writeLocalMember(roomSlug, null, member.clientId);
       publishLocal({ type: "leave", clientId: member.clientId });
@@ -103,7 +114,7 @@ export function useRoomRealtime(roomSlug: string, address?: string) {
   }, [mode, publishLocal, roomSlug]);
 
   const updateMember = useCallback(
-    async (updates: Partial<Pick<RoomMember, "status" | "muted" | "sharing">>) => {
+    async (updates: Partial<Pick<RoomMember, "status" | "muted" | "sharing" | "cameraOn">>) => {
       const member = memberRef.current;
       if (!member) return;
       const next = { ...member, ...updates, updatedAt: new Date().toISOString() };
@@ -131,6 +142,7 @@ export function useRoomRealtime(roomSlug: string, address?: string) {
       status: "available",
       muted: true,
       sharing: false,
+      cameraOn: false,
       joinedAt: now,
       updatedAt: now,
     };
@@ -159,9 +171,25 @@ export function useRoomRealtime(roomSlug: string, address?: string) {
             const message = payload as RoomMessage;
             setMessages((current) => [...current.slice(-(MAX_MESSAGES - 1)), message]);
           })
+          .on("broadcast", { event: "rtc" }, ({ payload }) => {
+            const signal = payload as RtcSignal;
+            signalListenersRef.current.forEach((listener) => listener(signal));
+          })
           .subscribe(async (subscriptionStatus) => {
             if (subscriptionStatus === "SUBSCRIBED") {
               await channel.track(member);
+              const lobbyMember: LobbyMember = {
+                clientId: member.clientId,
+                roomSlug,
+                updatedAt: now,
+              };
+              const lobbyChannel = client.channel("blockroom:lobby", {
+                config: { presence: { key: member.clientId } },
+              });
+              lobbyChannelRef.current = lobbyChannel;
+              lobbyChannel.subscribe(async (lobbyStatus) => {
+                if (lobbyStatus === "SUBSCRIBED") await lobbyChannel.track(lobbyMember);
+              });
               setJoined(true);
               setStatus("connected");
             }
@@ -173,6 +201,7 @@ export function useRoomRealtime(roomSlug: string, address?: string) {
               setError("Realtime channel could not connect. Check the Supabase project settings.");
             }
           });
+
       } catch {
         memberRef.current = null;
         setStatus("error");
@@ -209,6 +238,21 @@ export function useRoomRealtime(roomSlug: string, address?: string) {
     [mode, publishLocal],
   );
 
+  const sendRtcSignal = useCallback(
+    async (signal: Omit<RtcSignal, "senderId">) => {
+      const payload: RtcSignal = { ...signal, senderId: clientId };
+      if (mode === "supabase") {
+        await channelRef.current?.send({ type: "broadcast", event: "rtc", payload });
+      } else publishLocal({ type: "rtc", signal: payload });
+    },
+    [clientId, mode, publishLocal],
+  );
+
+  const subscribeRtcSignals = useCallback((listener: (signal: RtcSignal) => void) => {
+    signalListenersRef.current.add(listener);
+    return () => signalListenersRef.current.delete(listener);
+  }, []);
+
   useEffect(() => {
     if (mode !== "local-tabs" || typeof BroadcastChannel === "undefined") return;
     const channel = new BroadcastChannel(`blockroom-room:${roomSlug}`);
@@ -224,6 +268,8 @@ export function useRoomRealtime(roomSlug: string, address?: string) {
         });
       } else if (data.type === "chat") {
         setMessages((current) => [...current.slice(-(MAX_MESSAGES - 1)), data.message]);
+      } else if (data.type === "rtc") {
+        signalListenersRef.current.forEach((listener) => listener(data.signal));
       } else if (data.type === "sync-request" && memberRef.current) {
         publishLocal({ type: "presence", member: memberRef.current });
       }
@@ -265,6 +311,7 @@ export function useRoomRealtime(roomSlug: string, address?: string) {
         publishLocal({ type: "leave", clientId: member.clientId });
       } else {
         void channelRef.current?.untrack();
+        void lobbyChannelRef.current?.untrack();
       }
     }
     window.addEventListener("pagehide", handlePageHide);
@@ -273,6 +320,27 @@ export function useRoomRealtime(roomSlug: string, address?: string) {
       void leave();
     };
   }, [leave, mode, publishLocal, roomSlug]);
+
+  useEffect(() => {
+    if (!joined || membersById[clientId] == null) return;
+    const admitted = Object.values(membersById)
+      .sort((a, b) => a.joinedAt.localeCompare(b.joinedAt))
+      .slice(0, capacity)
+      .some((member) => member.clientId === clientId);
+    if (admitted) return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      void leave().then(() => {
+        if (cancelled) return;
+        setStatus("error");
+        setError(`This room is full. Capacity is ${capacity} members.`);
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [capacity, clientId, joined, leave, membersById]);
 
   const members = useMemo(
     () => Object.values(membersById).sort((a, b) => a.joinedAt.localeCompare(b.joinedAt)),
@@ -291,5 +359,7 @@ export function useRoomRealtime(roomSlug: string, address?: string) {
     leave,
     updateMember,
     sendMessage,
+    sendRtcSignal,
+    subscribeRtcSignals,
   };
 }

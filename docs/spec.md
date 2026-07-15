@@ -41,12 +41,14 @@ Home
 | Feature | Required behavior |
 |---|---|
 | Multi-page shell | Home, What is BlockRoom, How it works, Rooms, Room Detail, and Dashboard remain separate routes |
-| Wallet identity | Reown AppKit, wagmi, and viem with native wallet selection and network switching |
+| Wallet identity | Reown AppKit, wagmi, and viem with native wallet selection and network switching; email, social login, transfers, swaps, onramp, receive, and unrelated wallet history are disabled |
 | Supported EVM networks | Monad Testnet, Ethereum, Base, Arbitrum, Optimism, and Polygon |
 | Real-time rooms | Supabase Presence and Broadcast sync joined wallets, controls, and chat across browsers |
 | Honest fallback | Without Supabase environment variables, BroadcastChannel and localStorage support same-origin multi-tab testing and the UI says so |
 | Active members | Only connected wallets that explicitly join are shown; leave, disconnect, page close, and stale-client cleanup remove them |
-| Spatial controls | Mute, Unmute, Share Screen proof state, and Leave Space publish real state changes |
+| Spatial controls | Microphone, Webcam, Share Screen, and Leave Space use real browser media tracks and publish their state |
+| Peer media | WebRTC sends live audio and the selected camera or screen track to current room peers; Supabase or BroadcastChannel carries signaling |
+| Room capacity | Every room has a six-member MVP capacity; the client rejects members outside the earliest six observed joins |
 | Session gate | Focus time advances only while joined on the correct visible room page; completion unlocks at 30 minutes |
 | Wallet activity | Completed sessions are stored locally under the connected wallet address; multiple completions per day are allowed |
 | Live chat | Messages are sent to current room members in real time and are not filled with examples |
@@ -56,15 +58,18 @@ Home
 
 ## Room Directory Content
 
-Room cards show a name, type label, description, and live state. They never
-show an invented learner or occupancy count.
+Room cards show a name, type label, description, and real joined occupancy out
+of six. Counts come from Supabase Presence or the same-browser fallback and are
+never prefilled.
 
 | Name | Type | Description |
 |---|---|---|
 | Learning Room 1 | Learning | Group study session, open to anyone learning together |
 | Learning Room 2 | Learning | Group study session, open to anyone learning together |
-| Co-working Space 1 | Co-working | Focus together, work independently, body-double style |
-| Hackathon Preparation | Hackathon | Prep together for your next hackathon |
+| Learning Room 3 | Learning | Group study session, open to anyone learning together |
+| Learning Room 4 | Learning | Group study session, open to anyone learning together |
+| Co-working Space 1-4 | Co-working | Focus together, work independently, body-double style |
+| Hackathon Preparation 1-4 | Hackathon | Prep together for your next hackathon |
 
 ## State and Honesty Rules
 
@@ -78,12 +83,13 @@ show an invented learner or occupancy count.
 - A signed badge receipt spends no gas, creates no token, and is not an NFT.
 - Hiding or leaving the room pauses eligible time. Elapsed wall-clock time alone
   does not qualify.
+- The six-person cap is an honest frontend MVP guard, not a security boundary.
+  Strict atomic admission requires a trusted backend transaction.
+- Public STUN servers cover common WebRTC paths. Production-grade connectivity
+  across restrictive NATs requires TURN credentials.
 
 ## Features Excluded
 
-- Video or audio transport between members
-- Screen-stream transport to peers; browser capture is used only to confirm the
-  local Proof of Work sharing state
 - Persistent server-side chat history or user profiles
 - App-owned database tables and custom backend APIs
 - Booking or scheduling
@@ -98,8 +104,9 @@ show an invented learner or occupancy count.
 Next.js Client
   |-- Reown AppKit + wagmi: wallet selection, network switching, identity, and signatures
   |-- Supabase Presence: join, update, untrack, sync
-  |-- Supabase Broadcast: ephemeral room chat
-  |-- BroadcastChannel fallback: same-origin tab presence and chat
+  |-- Supabase Broadcast: ephemeral room chat and WebRTC signaling
+  |-- WebRTC mesh: microphone plus camera or screen media tracks
+  |-- BroadcastChannel fallback: same-origin tab presence, chat, and signaling
   `-- localStorage: wallet-scoped sessions and signed badge receipts
 ```
 

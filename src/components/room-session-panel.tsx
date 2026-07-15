@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -14,9 +14,13 @@ import {
   Play,
   SignOut,
   UsersThree,
+  VideoCamera,
+  VideoCameraSlash,
   WarningCircle,
 } from "@phosphor-icons/react";
 import { useAccount } from "wagmi";
+import { useRoomMedia } from "@/hooks/use-room-media";
+import { useRoomOccupancy } from "@/hooks/use-room-occupancy";
 import { useRoomRealtime } from "@/hooks/use-room-realtime";
 import { shortAddress } from "@/lib/realtime-types";
 import type { Room } from "@/lib/rooms";
@@ -42,11 +46,10 @@ export function RoomSessionPanel({ room }: { room: Room }) {
     tickSession,
     completeSession,
   } = useSession();
-  const realtime = useRoomRealtime(room.slug, address);
+  const realtime = useRoomRealtime(room.slug, address, room.capacity);
+  const occupancy = useRoomOccupancy([room.slug]);
   const [activeTab, setActiveTab] = useState<"members" | "chat">("members");
   const [draft, setDraft] = useState("");
-  const [shareError, setShareError] = useState<string | null>(null);
-  const screenStreamRef = useRef<MediaStream | null>(null);
   const session = getActiveSession(address);
   const isCurrentRoom = session?.roomSlug === room.slug;
   const elapsed = isCurrentRoom ? session.elapsedSeconds : 0;
@@ -54,6 +57,16 @@ export function RoomSessionPanel({ room }: { room: Room }) {
   const remaining = Math.max(0, REQUIRED_SESSION_SECONDS - elapsed);
   const progress = Math.min(100, (elapsed / REQUIRED_SESSION_SECONDS) * 100);
   const me = realtime.members.find((member) => member.clientId === realtime.clientId);
+  const media = useRoomMedia({
+    clientId: realtime.clientId,
+    members: realtime.members,
+    joined: realtime.joined,
+    sendSignal: realtime.sendRtcSignal,
+    subscribeSignals: realtime.subscribeRtcSignals,
+    updateMember: realtime.updateMember,
+  });
+  const liveCount = Math.max(occupancy.counts[room.slug] ?? 0, realtime.members.length);
+  const roomFull = liveCount >= room.capacity;
 
   useEffect(() => {
     if (!address || !realtime.joined || !isCurrentRoom || session.paused) return;
@@ -78,11 +91,8 @@ export function RoomSessionPanel({ room }: { room: Room }) {
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
   }, [address, isCurrentRoom, pauseSession, realtime, resumeSession]);
 
-  useEffect(() => {
-    return () => screenStreamRef.current?.getTracks().forEach((track) => track.stop());
-  }, []);
-
   async function handleJoin() {
+    if (roomFull) return;
     await realtime.join();
   }
 
@@ -94,33 +104,9 @@ export function RoomSessionPanel({ room }: { room: Room }) {
 
   async function handleLeave() {
     if (address && isCurrentRoom) pauseSession(address);
-    screenStreamRef.current?.getTracks().forEach((track) => track.stop());
+    media.stopAllMedia();
     await realtime.leave();
     router.push("/rooms");
-  }
-
-  async function handleShare() {
-    setShareError(null);
-    if (me?.sharing) {
-      screenStreamRef.current?.getTracks().forEach((track) => track.stop());
-      screenStreamRef.current = null;
-      await realtime.updateMember({ sharing: false });
-      return;
-    }
-    try {
-      if (!navigator.mediaDevices?.getDisplayMedia) {
-        throw new Error("Screen capture is unavailable in this browser.");
-      }
-      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
-      screenStreamRef.current = stream;
-      await realtime.updateMember({ sharing: true });
-      stream.getVideoTracks()[0]?.addEventListener("ended", () => {
-        screenStreamRef.current = null;
-        void realtime.updateMember({ sharing: false });
-      }, { once: true });
-    } catch (error) {
-      setShareError(error instanceof Error ? error.message : "Screen sharing permission was not granted.");
-    }
   }
 
   function handleComplete() {
@@ -156,15 +142,15 @@ export function RoomSessionPanel({ room }: { room: Room }) {
           <h2>{isConnected ? "Ready to publish your presence" : "Connect before you join"}</h2>
           <p>
             Only wallets that press Join Room appear here. Closing the page or
-            leaving removes your presence from the room.
+            leaving removes your presence. This room supports up to {room.capacity} members.
           </p>
           {realtime.mode === "local-tabs" && (
             <div className="transport-notice"><WarningCircle size={19} /> Same-browser tab mode. Add Supabase keys for different-browser testing.</div>
           )}
           {realtime.error && <div className="inline-error" role="alert">{realtime.error}</div>}
           {isConnected ? (
-            <button className="product-button primary" type="button" onClick={handleJoin} disabled={realtime.status === "connecting"}>
-              <UsersThree size={19} /> {realtime.status === "connecting" ? "Joining room" : "Join Room"}
+            <button className="product-button primary" type="button" onClick={handleJoin} disabled={realtime.status === "connecting" || roomFull}>
+              <UsersThree size={19} /> {roomFull ? "Room full" : realtime.status === "connecting" ? "Joining room" : `Join Room (${liveCount}/${room.capacity})`}
             </button>
           ) : (
             <WalletControl placement="hero" />
@@ -179,7 +165,7 @@ export function RoomSessionPanel({ room }: { room: Room }) {
       <div className="workspace-main">
         <div className="workspace-tabs" role="tablist" aria-label="Room workspace views">
           <button type="button" role="tab" aria-selected={activeTab === "members"} className={activeTab === "members" ? "active" : ""} onClick={() => setActiveTab("members")}>
-            <UsersThree size={18} /> Active members <span>{realtime.members.length}</span>
+            <UsersThree size={18} /> Active members <span>{realtime.members.length}/{room.capacity}</span>
           </button>
           <button type="button" role="tab" aria-selected={activeTab === "chat"} className={activeTab === "chat" ? "active" : ""} onClick={() => setActiveTab("chat")}>
             <ChatCircleText size={18} /> Discussions
@@ -188,7 +174,12 @@ export function RoomSessionPanel({ room }: { room: Room }) {
 
         <div className="workspace-view">
           {activeTab === "members" ? (
-            <ActiveMembers members={realtime.members} currentClientId={realtime.clientId} />
+            <ActiveMembers
+              members={realtime.members}
+              currentClientId={realtime.clientId}
+              localStream={media.previewStream}
+              remoteStreams={media.remoteStreams}
+            />
           ) : (
             <div className="chat-panel">
               <div className="chat-log" aria-live="polite">
@@ -210,16 +201,20 @@ export function RoomSessionPanel({ room }: { room: Room }) {
         </div>
 
         <div className="spatial-controls" aria-label="Spatial controls">
-          <button type="button" onClick={() => realtime.updateMember({ muted: !me?.muted })}>
+          <button type="button" onClick={() => media.toggleMicrophone(Boolean(me?.muted))}>
             {me?.muted ? <MicrophoneSlash size={19} /> : <Microphone size={19} />}
             {me?.muted ? "Unmute" : "Mute"}
           </button>
-          <button type="button" className={me?.sharing ? "active" : ""} onClick={handleShare}>
+          <button type="button" className={me?.cameraOn ? "active" : ""} onClick={() => media.toggleCamera(Boolean(me?.cameraOn))}>
+            {me?.cameraOn ? <VideoCamera size={19} /> : <VideoCameraSlash size={19} />}
+            {me?.cameraOn ? "Stop Camera" : "Webcam"}
+          </button>
+          <button type="button" className={me?.sharing ? "active" : ""} onClick={() => media.toggleScreenShare(Boolean(me?.sharing))}>
             <MonitorArrowUp size={19} /> {me?.sharing ? "Stop sharing" : "Share Screen"}
           </button>
           <button type="button" className="leave" onClick={handleLeave}><SignOut size={19} /> Leave Space</button>
         </div>
-        {shareError && <div className="control-error" role="alert"><WarningCircle size={17} /> {shareError}</div>}
+        {media.mediaError && <div className="control-error" role="alert"><WarningCircle size={17} /> {media.mediaError}</div>}
       </div>
 
       <aside className="session-console-new">
