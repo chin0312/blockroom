@@ -25,7 +25,7 @@ The MVP must prove that:
 
 ```text
 Home
-  -> connect wallet on Monad Testnet
+  -> choose a wallet and one of the supported EVM networks
   -> browse rooms
   -> enter a room and explicitly join
   -> see real joined wallets, statuses, and chat
@@ -41,7 +41,8 @@ Home
 | Feature | Required behavior |
 |---|---|
 | Multi-page shell | Home, What is BlockRoom, How it works, Rooms, Room Detail, and Dashboard remain separate routes |
-| Wallet identity | RainbowKit, wagmi, viem, Monad Testnet, connected address and network |
+| Wallet identity | Reown AppKit, wagmi, and viem with native wallet selection and network switching |
+| Supported EVM networks | Monad Testnet, Ethereum, Base, Arbitrum, Optimism, and Polygon |
 | Real-time rooms | Supabase Presence and Broadcast sync joined wallets, controls, and chat across browsers |
 | Honest fallback | Without Supabase environment variables, BroadcastChannel and localStorage support same-origin multi-tab testing and the UI says so |
 | Active members | Only connected wallets that explicitly join are shown; leave, disconnect, page close, and stale-client cleanup remove them |
@@ -95,7 +96,7 @@ show an invented learner or occupancy count.
 
 ```text
 Next.js Client
-  |-- RainbowKit + wagmi: wallet identity and message signature
+  |-- Reown AppKit + wagmi: wallet selection, network switching, identity, and signatures
   |-- Supabase Presence: join, update, untrack, sync
   |-- Supabase Broadcast: ephemeral room chat
   |-- BroadcastChannel fallback: same-origin tab presence and chat
@@ -107,3 +108,5 @@ Environment variables:
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY` is accepted only as a compatibility fallback
+- `NEXT_PUBLIC_REOWN_PROJECT_ID`
+- `NEXT_PUBLIC_APP_URL`

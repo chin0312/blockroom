@@ -100,7 +100,14 @@ export function DashboardClient() {
         ) : <p className="active-session-empty">Start a session inside a joined room. No example timer is shown here.</p>}
       </section>
 
-      <BadgeSection address={address} completionCount={records.length} claims={claims} onClaim={saveBadgeClaim} />
+      <BadgeSection
+        address={address}
+        chainId={chain?.id}
+        networkName={chain?.name}
+        completionCount={records.length}
+        claims={claims}
+        onClaim={saveBadgeClaim}
+      />
     </div>
   );
 }

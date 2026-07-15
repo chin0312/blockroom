@@ -2,7 +2,7 @@
 
 ## Core Rules
 
-- Stack: Next.js App Router, TypeScript, Tailwind CSS, RainbowKit, wagmi,
+- Stack: Next.js App Router, TypeScript, Tailwind CSS, Reown AppKit, wagmi,
   viem, and Supabase Realtime.
 - React context owns wallet-scoped browser activity. Supabase is used only for
   ephemeral Presence and Broadcast channels.

@@ -13,6 +13,8 @@ import type { BadgeClaim } from "./session-provider";
 
 type BadgeSectionProps = {
   address?: string;
+  chainId?: number;
+  networkName?: string;
   completionCount: number;
   claims: BadgeClaim[];
   onClaim: (claim: BadgeClaim) => void;
@@ -23,7 +25,14 @@ const badges = [
   { level: 2 as const, required: 5, name: "Focus Protocol", description: "Complete five eligible focus sessions." },
 ];
 
-export function BadgeSection({ address, completionCount, claims, onClaim }: BadgeSectionProps) {
+export function BadgeSection({
+  address,
+  chainId,
+  networkName,
+  completionCount,
+  claims,
+  onClaim,
+}: BadgeSectionProps) {
   const { signMessageAsync } = useSignMessage();
   const [pendingLevel, setPendingLevel] = useState<1 | 2 | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +46,7 @@ export function BadgeSection({ address, completionCount, claims, onClaim }: Badg
       "BlockRoom signed demo badge",
       `Wallet: ${address.toLowerCase()}`,
       `Badge: ${name} (Level ${level})`,
-      "Network context: Monad Testnet",
+      `Network context: ${networkName ?? "Unknown network"}${chainId ? ` (${chainId})` : ""}`,
       `Requested at: ${claimedAt}`,
       "This signature does not mint an NFT, send a transaction, or spend gas.",
     ].join("\n");
@@ -98,4 +107,3 @@ export function BadgeSection({ address, completionCount, claims, onClaim }: Badg
     </section>
   );
 }
-

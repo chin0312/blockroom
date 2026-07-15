@@ -9,7 +9,7 @@ const steps = [
     title: "Connect identity",
     short: "Wallet",
     icon: "wallet" as IconName,
-    description: "Connect MetaMask and confirm Monad Testnet. No profile is created behind the scenes.",
+    description: "Choose a supported wallet and EVM network through Reown AppKit. No profile is created behind the scenes.",
     signal: "Wallet address + network",
   },
   {

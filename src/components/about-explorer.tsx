@@ -11,7 +11,7 @@ const concepts = [
     title: "One address. No invented profile.",
     description:
       "BlockRoom uses a connected wallet as the only identity layer. Until a wallet connects, the interface stays honestly anonymous.",
-    points: ["No username database", "Address shown only after connection", "Monad Testnet is explicit"],
+    points: ["No username database", "Address shown only after connection", "Current EVM network is explicit"],
   },
   {
     id: "rooms",
