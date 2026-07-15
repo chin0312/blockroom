@@ -13,7 +13,7 @@ import type {
 } from "@/lib/realtime-types";
 
 const HEARTBEAT_MS = 4_000;
-const STALE_AFTER_MS = 12_000;
+const STALE_AFTER_MS = 90_000;
 const MAX_MESSAGES = 100;
 
 type LocalEvent =

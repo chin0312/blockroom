@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 import type { LobbyMember, RoomMember } from "@/lib/realtime-types";
 
-const STALE_AFTER_MS = 12_000;
+const STALE_AFTER_MS = 90_000;
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey =
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??

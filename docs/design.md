@@ -15,10 +15,10 @@ Design dials:
 ## Approved Visual Direction
 
 - Cold off-white field with broad browser-fit gutters
-- Floating capsule navigation, maximum 80px high on desktop
+- Floating capsule navigation with a larger 78px desktop control area and balanced type scale
 - Near-black display type and controls
 - One restrained violet signal color
-- Translucent silver modules that represent wallet, room, visible time, and proof
+- Translucent silver modules that represent wallet, room, joined time, and proof
 - Hairline borders, subtle internal highlights, cool shadows
 - Buttons are pills; product surfaces use consistent 18 to 24px radii
 - Light mode only for this Alpha
@@ -44,11 +44,10 @@ conflict with those screens.
 ## Product Page Architecture
 
 - Home: concise proposition and room entry points
-- What is BlockRoom: interactive identity, room, visible-time, and proof model
-- How it works: connected flow from wallet to local record
+- What is BlockRoom: interactive identity, room, elapsed-time, and proof model followed by the complete How it works flow
 - Rooms: filterable directory with honest live or empty state
-- Room Detail: actual members, session console, spatial controls, and live chat
-- Dashboard: contribution calendar, wallet statistics, history, and signed badges
+- Room Detail: actual members, compact live timer, fullscreen meeting stage, spatial controls, and live chat
+- Dashboard: contribution calendar, wallet statistics, history, and signed badges; no separate current-session card
 
 ## Real State Design
 

@@ -28,8 +28,8 @@ const concepts = [
     icon: "shield" as IconName,
     title: "Time first. Proof second.",
     description:
-      "A session starts when the wallet joins and must accumulate 30 visible minutes before the leave prompt can save it to Dashboard activity.",
-    points: ["Visible-room time only", "Many sessions per day", "Browser-local records are labelled local"],
+      "A session starts when the wallet joins and keeps time while that room connection remains active. After 30 minutes, the leave prompt can save it to Dashboard activity.",
+    points: ["Work across browser tabs", "Many sessions per day", "Browser-local records are labelled local"],
   },
 ];
 

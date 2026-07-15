@@ -1,6 +1,5 @@
-import Link from "next/link";
 import { AboutExplorer } from "@/components/about-explorer";
-import { Icon } from "@/components/icons";
+import { HowStepper } from "@/components/how-stepper";
 
 export default function AboutPage() {
   return (
@@ -13,15 +12,24 @@ export default function AboutPage() {
         </div>
         <p>
           BlockRoom is an interactive prototype for co-learning and
-          body-doubling. It separates what is real now from what will become
-          visible to collaborators now and recorded honestly in this browser.
+          body-doubling. It shows real collaborators while they are connected
+          and records only the sessions a wallet explicitly chooses to save.
         </p>
       </header>
       <AboutExplorer />
-      <section className="page-next-step">
-        <span>Next</span>
-        <div><h2>See the full trust flow.</h2><p>From wallet connection to a qualifying session.</p></div>
-        <Link className="button button-primary" href="/how-it-works">How it works <Icon name="arrow" size={18} /></Link>
+      <section className="combined-how-section" id="how-it-works" aria-labelledby="how-it-works-title">
+        <header>
+          <span className="page-code">02 / TRUST FLOW</span>
+          <div>
+            <span className="section-label">How it works</span>
+            <h2 id="how-it-works-title">Every state has a source of truth.</h2>
+          </div>
+          <p>
+            Move from wallet identity to a room, keep collaborating while you
+            work across tabs, then choose whether to save an eligible session.
+          </p>
+        </header>
+        <HowStepper />
       </section>
     </div>
   );

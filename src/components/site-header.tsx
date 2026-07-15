@@ -10,7 +10,6 @@ import { WalletControl } from "./wallet-control";
 const navigation = [
   { href: "/", label: "Home" },
   { href: "/about", label: "What is BlockRoom" },
-  { href: "/how-it-works", label: "How it works" },
   { href: "/rooms", label: "Rooms" },
   { href: "/dashboard", label: "Dashboard" },
 ];

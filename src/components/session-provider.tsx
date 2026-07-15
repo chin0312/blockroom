@@ -17,6 +17,7 @@ export type ActiveSession = {
   walletAddress: string;
   roomSlug: string;
   startedAt: string;
+  lastCountedAt: string;
   elapsedSeconds: number;
   paused: boolean;
 };
@@ -72,15 +73,51 @@ function normalizeAddress(address: string) {
   return address.toLowerCase();
 }
 
+function pauseAllSessions(state: ActivityState, now = new Date()): ActivityState {
+  const activeSessions = Object.fromEntries(
+    Object.entries(state.activeSessions).map(([address, session]) => {
+      if (session.paused) return [address, session];
+      const additionalSeconds = Math.max(
+        0,
+        Math.floor(
+          (now.getTime() - new Date(session.lastCountedAt).getTime()) / 1000,
+        ),
+      );
+      return [
+        address,
+        {
+          ...session,
+          elapsedSeconds: session.elapsedSeconds + additionalSeconds,
+          lastCountedAt: now.toISOString(),
+          paused: true,
+        },
+      ];
+    }),
+  );
+  return { ...state, activeSessions };
+}
+
 function readState(raw: string | null): ActivityState {
   if (!raw) return EMPTY_STATE;
   try {
     const parsed = JSON.parse(raw) as Partial<ActivityState>;
+    const activeSessions =
+      parsed.activeSessions && typeof parsed.activeSessions === "object"
+        ? Object.fromEntries(
+            Object.entries(parsed.activeSessions).map(([address, session]) => [
+              address,
+              {
+                ...session,
+                lastCountedAt:
+                  typeof session.lastCountedAt === "string"
+                    ? session.lastCountedAt
+                    : new Date().toISOString(),
+              },
+            ]),
+          )
+        : {};
     return {
-      activeSessions:
-        parsed.activeSessions && typeof parsed.activeSessions === "object"
-          ? parsed.activeSessions
-          : {},
+      activeSessions,
       records: Array.isArray(parsed.records)
         ? parsed.records.filter((record) => Boolean(record?.walletAddress))
         : [],
@@ -119,6 +156,17 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!hydrated) return;
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }, [hydrated, state]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const handlePageHide = () => {
+      const pausedState = pauseAllSessions(state);
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(pausedState));
+      setState(pausedState);
+    };
+    window.addEventListener("pagehide", handlePageHide);
+    return () => window.removeEventListener("pagehide", handlePageHide);
   }, [hydrated, state]);
 
   const getActiveSession = useCallback(
@@ -160,6 +208,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       getBadgeClaims,
       startSession(roomSlug, walletAddress) {
         const normalized = normalizeAddress(walletAddress);
+        const now = new Date().toISOString();
         setState((current) => ({
           ...current,
           activeSessions: {
@@ -167,7 +216,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             [normalized]: {
               walletAddress: normalized,
               roomSlug,
-              startedAt: new Date().toISOString(),
+              startedAt: now,
+              lastCountedAt: now,
               elapsedSeconds: 0,
               paused: false,
             },
@@ -179,11 +229,23 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         setState((current) => {
           const session = current.activeSessions[normalized];
           if (!session || session.paused) return current;
+          const now = new Date();
+          const additionalSeconds = Math.max(
+            0,
+            Math.floor(
+              (now.getTime() - new Date(session.lastCountedAt).getTime()) / 1000,
+            ),
+          );
           return {
             ...current,
             activeSessions: {
               ...current.activeSessions,
-              [normalized]: { ...session, paused: true },
+              [normalized]: {
+                ...session,
+                elapsedSeconds: session.elapsedSeconds + additionalSeconds,
+                lastCountedAt: now.toISOString(),
+                paused: true,
+              },
             },
           };
         });
@@ -197,7 +259,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             ...current,
             activeSessions: {
               ...current.activeSessions,
-              [normalized]: { ...session, paused: false },
+              [normalized]: {
+                ...session,
+                lastCountedAt: new Date().toISOString(),
+                paused: false,
+              },
             },
           };
         });
@@ -209,13 +275,22 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           if (!session || session.roomSlug !== roomSlug || session.paused) {
             return current;
           }
+          const now = new Date();
+          const additionalSeconds = Math.max(
+            0,
+            Math.floor(
+              (now.getTime() - new Date(session.lastCountedAt).getTime()) / 1000,
+            ),
+          );
+          if (additionalSeconds === 0) return current;
           return {
             ...current,
             activeSessions: {
               ...current.activeSessions,
               [normalized]: {
                 ...session,
-                elapsedSeconds: session.elapsedSeconds + 1,
+                elapsedSeconds: session.elapsedSeconds + additionalSeconds,
+                lastCountedAt: now.toISOString(),
               },
             },
           };

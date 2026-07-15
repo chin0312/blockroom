@@ -29,9 +29,10 @@
 ## Session Rules
 
 - A session belongs to one normalized wallet address and one room.
-- Time advances only while the room component is mounted, the user is joined,
-  the session is not paused, and `document.visibilityState` is `visible`.
-- `visibilitychange` must immediately publish Paused or Focusing.
+- Time advances while the room component is mounted, the user remains joined,
+  and the session is not explicitly paused for a leave decision.
+- Switching browser tabs does not pause time or presence; learners may research,
+  code, write, or present outside the BlockRoom tab while remaining in the room.
 - Completion requires at least 1,800 accumulated seconds.
 - Multiple eligible records per wallet per day are valid.
 

@@ -10,7 +10,7 @@ export default function HomePage() {
           <span className="section-label">Web3 co-learning, without invented activity</span>
           <h1>Focus together.<br />Keep the proof.</h1>
           <p>
-            Join a real-time focus room, stay visibly present for 30 minutes,
+            Join a real-time focus room, stay connected for 30 minutes,
             and keep an honest activity record tied to your wallet.
           </p>
           <div className="hero-actions">
@@ -35,7 +35,7 @@ export default function HomePage() {
               <span className="map-center"><Icon name="book" size={30} /></span>
             </div>
             <div className="preview-console">
-              <span>VISIBLE ROOM TIME</span>
+              <span>JOINED ROOM TIME</span>
               <strong>00:00</strong>
               <div className="preview-progress"><i /></div>
               <small>Complete unlocks at 30:00</small>
@@ -54,9 +54,9 @@ export default function HomePage() {
           <div><span>Understand the model</span><h2>What is BlockRoom?</h2></div>
           <Icon name="arrow" />
         </Link>
-        <Link className="index-card" href="/how-it-works">
+        <Link className="index-card" href="/rooms">
           <span className="index-number">02</span>
-          <div><span>See the trust flow</span><h2>How it works</h2></div>
+          <div><span>Join a real context</span><h2>Explore Rooms</h2></div>
           <Icon name="arrow" />
         </Link>
         <Link className="index-card index-card-accent" href="/dashboard">

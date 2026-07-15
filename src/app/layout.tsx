@@ -7,7 +7,7 @@ import { Providers } from "./providers";
 export const metadata: Metadata = {
   title: "BlockRoom | Focus together, prove the time",
   description:
-    "A real-time Web3 co-learning space with wallet presence, visible-time sessions, and honest local activity records.",
+    "A real-time Web3 co-learning space with wallet presence, joined-room sessions, and honest local activity records.",
 };
 
 export default function RootLayout({

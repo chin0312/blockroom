@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import {
-  ArrowLeft,
   ChatCircleText,
   CheckCircle,
   ClockCountdown,
+  CornersIn,
+  CornersOut,
   Microphone,
   MicrophoneSlash,
   MonitorArrowUp,
@@ -52,6 +53,9 @@ export function RoomSessionPanel({ room }: { room: Room }) {
   const [draft, setDraft] = useState("");
   const [leavePromptOpen, setLeavePromptOpen] = useState(false);
   const [leaveDestination, setLeaveDestination] = useState("/rooms");
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [fullscreenAvailable, setFullscreenAvailable] = useState(false);
+  const workspaceRef = useRef<HTMLElement>(null);
   const joinTimerStartedRef = useRef(false);
   const session = getActiveSession(address);
   const isCurrentRoom = session?.roomSlug === room.slug;
@@ -86,25 +90,25 @@ export function RoomSessionPanel({ room }: { room: Room }) {
   useEffect(() => {
     if (!address || !realtime.joined || !isCurrentRoom || session.paused) return;
     const interval = window.setInterval(() => {
-      if (document.visibilityState === "visible") tickSession(room.slug, address);
+      tickSession(room.slug, address);
     }, 1000);
     return () => window.clearInterval(interval);
   }, [address, isCurrentRoom, realtime.joined, room.slug, session?.paused, tickSession]);
 
   useEffect(() => {
-    if (!address || !realtime.joined) return;
-    function handleVisibilityChange() {
-      if (document.visibilityState === "hidden") {
-        if (isCurrentRoom) pauseSession(address!);
-        void realtime.updateMember({ status: "paused" });
-      } else {
-        if (isCurrentRoom) resumeSession(address!);
-        void realtime.updateMember({ status: isCurrentRoom ? "focusing" : "available" });
-      }
-    }
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, [address, isCurrentRoom, pauseSession, realtime, resumeSession]);
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) setFullscreenAvailable(Boolean(document.fullscreenEnabled));
+    });
+    const handleFullscreenChange = () => {
+      setIsFullscreen(document.fullscreenElement === workspaceRef.current);
+    };
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    };
+  }, []);
 
   async function handleJoin() {
     if (roomFull) return;
@@ -132,7 +136,17 @@ export function RoomSessionPanel({ room }: { room: Room }) {
     media.stopAllMedia();
     setLeavePromptOpen(false);
     await realtime.leave();
+    if (document.fullscreenElement) await document.exitFullscreen();
     router.push(leaveDestination);
+  }
+
+  async function toggleFullscreen() {
+    if (!workspaceRef.current || !fullscreenAvailable) return;
+    if (document.fullscreenElement === workspaceRef.current) {
+      await document.exitFullscreen();
+    } else {
+      await workspaceRef.current.requestFullscreen();
+    }
   }
 
   useEffect(() => {
@@ -202,14 +216,31 @@ export function RoomSessionPanel({ room }: { room: Room }) {
   }
 
   return (
-    <section className="room-workspace">
+    <section ref={workspaceRef} className={`room-workspace${isFullscreen ? " is-fullscreen" : ""}`}>
       <div className="workspace-main">
-        <div className="workspace-tabs" role="tablist" aria-label="Room workspace views">
-          <button type="button" role="tab" aria-selected={activeTab === "members"} className={activeTab === "members" ? "active" : ""} onClick={() => setActiveTab("members")}>
-            <UsersThree size={18} /> Active members <span>{realtime.members.length}/{room.capacity}</span>
-          </button>
-          <button type="button" role="tab" aria-selected={activeTab === "chat"} className={activeTab === "chat" ? "active" : ""} onClick={() => setActiveTab("chat")}>
-            <ChatCircleText size={18} /> Discussions
+        <div className="workspace-tabs">
+          <div className="workspace-tab-group" role="tablist" aria-label="Room workspace views">
+            <button type="button" role="tab" aria-selected={activeTab === "members"} className={activeTab === "members" ? "active" : ""} onClick={() => setActiveTab("members")}>
+              <UsersThree size={18} /> Active members <span>{realtime.members.length}/{room.capacity}</span>
+            </button>
+            <button type="button" role="tab" aria-selected={activeTab === "chat"} className={activeTab === "chat" ? "active" : ""} onClick={() => setActiveTab("chat")}>
+              <ChatCircleText size={18} /> Discussions
+            </button>
+          </div>
+          <div className="workspace-session-chip" aria-label={`${formatTimer(elapsed)} elapsed in this room`}>
+            <ClockCountdown size={17} />
+            <div><strong>{formatTimer(elapsed)}</strong><span>{eligible ? "Ready to save" : `${formatTimer(remaining)} to qualify`}</span></div>
+          </div>
+          <button
+            type="button"
+            className="workspace-fullscreen-action"
+            onClick={() => void toggleFullscreen()}
+            disabled={!fullscreenAvailable}
+            aria-label={isFullscreen ? "Exit room fullscreen" : "Open room fullscreen"}
+            title={fullscreenAvailable ? (isFullscreen ? "Exit fullscreen" : "Present room fullscreen") : "Fullscreen is unavailable in this browser"}
+          >
+            {isFullscreen ? <CornersIn size={19} /> : <CornersOut size={19} />}
+            <span>{isFullscreen ? "Exit" : "Fullscreen"}</span>
           </button>
         </div>
 
@@ -258,15 +289,7 @@ export function RoomSessionPanel({ room }: { room: Room }) {
         {media.mediaError && <div className="control-error" role="alert"><WarningCircle size={17} /> {media.mediaError}</div>}
       </div>
 
-      <aside className="session-console-new">
-        <div className="console-heading"><span>Session console</span><span className={`connection-state ${realtime.status}`}>{realtime.mode === "supabase" ? "Realtime" : "Local tabs"}</span></div>
-        <div className="timer-display"><strong>{formatTimer(elapsed)}</strong><span>in room</span></div>
-        <div className="timer-progress" aria-label={`${Math.round(progress)} percent complete`}><span style={{ width: `${progress}%` }} /></div>
-        <div className="focus-state"><span className={isCurrentRoom && !session?.paused ? "pulse active" : "pulse"} />{session?.paused ? "Paused while hidden or leaving" : "Tracking started when you joined"}</div>
-        <p className={eligible ? "console-note eligible" : "console-note"}><ClockCountdown size={18} />{eligible ? `Eligible to save ${formatTimer(elapsed)} when you leave.` : `${formatTimer(remaining)} of visible room time until this session can be saved.`}</p>
-        <div className="console-truth"><strong>Automatic session</strong><p>No start or complete action is needed. Leave the room to decide whether to save the real accumulated time.</p></div>
-        <button className="back-to-rooms" type="button" onClick={() => requestLeave()}><ArrowLeft size={17} /> Room directory</button>
-      </aside>
+      <div className="workspace-progress" aria-label={`${Math.round(progress)} percent of the minimum session complete`}><span style={{ width: `${progress}%` }} /></div>
 
       {leavePromptOpen && (
         <div className="leave-dialog-backdrop" role="presentation">
@@ -277,8 +300,8 @@ export function RoomSessionPanel({ room }: { room: Room }) {
             <h2 id="leave-dialog-title">{eligible ? "Save this focus session?" : "Leave without a record?"}</h2>
             <p>
               {eligible
-                ? `You accumulated ${formatTimer(elapsed)} of visible room time. Save this exact duration to your wallet activity before leaving.`
-                : `You accumulated ${formatTimer(elapsed)}. Sessions need at least 30:00 of visible room time before they can be recorded.`}
+                ? `You accumulated ${formatTimer(elapsed)} while joined. Save this exact duration to your wallet activity before leaving.`
+                : `You accumulated ${formatTimer(elapsed)}. Sessions need at least 30:00 of joined room time before they can be recorded.`}
             </p>
             <div className="leave-dialog-actions">
               {eligible && <button type="button" className="save" onClick={() => void finishLeave(true)}><CheckCircle size={18} /> Save and leave</button>}

@@ -5,7 +5,7 @@
 BlockRoom is a Web3 co-learning and co-working MVP for real human testing. A
 connected wallet is the visible identity. People in separate browsers can join
 the same room, see genuine presence and status changes, chat, focus together,
-and create a browser-local activity record after 30 minutes of visible room
+and create a browser-local activity record after 30 minutes of joined room
 time.
 
 The product never invents users, occupancy, chat, sessions, statistics, badges,
@@ -17,7 +17,7 @@ The MVP must prove that:
 
 1. A wallet can be used as a login-free room identity.
 2. Real connected people can share ephemeral room state without mock members.
-3. Thirty minutes of visible room focus can create a wallet-scoped local record.
+3. Thirty minutes of joined room focus can create a wallet-scoped local record.
 4. A real wallet signature can authorize a clearly labelled local demo badge
    without claiming that an NFT or chain transaction occurred.
 
@@ -29,10 +29,9 @@ Home
   -> browse rooms
   -> enter a room and explicitly join
   -> see real joined wallets, statuses, and chat
-  -> start a 30-minute visible-tab session
-  -> hide tab: timer and presence pause
-  -> return: timer and presence resume
-  -> complete: write a wallet-scoped browser record
+  -> joining automatically starts a 30-minute qualifying session
+  -> work across tabs while remaining joined: elapsed time continues
+  -> leave after 30 minutes: choose whether to save the exact elapsed time
   -> Dashboard: contribution cell, totals, streak, badge eligibility
 ```
 
@@ -40,7 +39,7 @@ Home
 
 | Feature | Required behavior |
 |---|---|
-| Multi-page shell | Home, What is BlockRoom, How it works, Rooms, Room Detail, and Dashboard remain separate routes |
+| Multi-page shell | Home, combined What is BlockRoom + How it works, Rooms, Room Detail, and Dashboard are primary routes; the legacy How it works URL redirects to its section on the combined page |
 | Wallet identity | Reown AppKit, wagmi, and viem with native wallet selection and network switching; the BlockRoom identity panel shows no balances or assets and disables email, social login, transfers, swaps, onramp, receive, and unrelated wallet history |
 | Supported EVM networks | Monad Testnet, Ethereum, Base, Arbitrum, Optimism, and Polygon |
 | Real-time rooms | Supabase Presence and Broadcast sync joined wallets, controls, and chat across browsers |
@@ -49,8 +48,9 @@ Home
 | Spatial controls | Microphone, Webcam, Share Screen, and Leave Space use real browser media tracks and publish their state |
 | Peer media | WebRTC sends live audio and the selected camera or screen track to current room peers; Supabase or BroadcastChannel carries signaling |
 | Meeting stage | Participant media uses a responsive 1-6 tile grid; any member can be pinned to a 16:9 primary stage, and a new screen share is promoted when no pin exists |
+| Fullscreen room | A joined room uses a meeting-first full-width layout and can enter the browser Fullscreen API; the live timer remains visible as a compact top-right control |
 | Room capacity | Every room has a six-member MVP capacity; the client rejects members outside the earliest six observed joins |
-| Session gate | Joining starts the session automatically; visible focus time advances while joined, and leaving offers to save only after 30 minutes |
+| Session gate | Joining starts the session automatically; elapsed time advances while joined even when another browser tab is active, and leaving offers to save only after 30 minutes |
 | Wallet activity | The leave confirmation stores the exact accumulated duration locally under the connected wallet address; multiple eligible sessions per day are allowed |
 | Live chat | Messages are sent to current room members in real time and are not filled with examples |
 | Contribution graph | Calendar months are derived only from that wallet's completed local sessions; each day's continuous color depth represents its accumulated duration on a 0-24 hour scale, and selecting a day reveals its exact total and saved session records |
@@ -82,8 +82,8 @@ never prefilled.
 - Session records and badge receipts use browser localStorage and are always
   described as local activity.
 - A signed badge receipt spends no gas, creates no token, and is not an NFT.
-- Hiding or leaving the room pauses eligible time. Elapsed wall-clock time alone
-  does not qualify.
+- Switching tabs does not pause eligible time. Explicitly leaving the room ends
+  the joined interval and opens the save-or-discard decision.
 - The six-person cap is an honest frontend MVP guard, not a security boundary.
   Strict atomic admission requires a trusted backend transaction.
 - Public STUN servers cover common WebRTC paths. Production-grade connectivity

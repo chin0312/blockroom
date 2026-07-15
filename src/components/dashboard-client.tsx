@@ -49,16 +49,12 @@ export function DashboardClient() {
   const { address, chain, isConnected } = useAccount();
   const {
     hydrated,
-    getActiveSession,
     getRecords,
     getBadgeClaims,
-    cancelSession,
     saveBadgeClaim,
   } = useSession();
-  const activeSession = getActiveSession(address);
   const records = getRecords(address);
   const claims = getBadgeClaims(address);
-  const activeRoom = activeSession ? getRoom(activeSession.roomSlug) : undefined;
   const totalSeconds = records.reduce((sum, record) => sum + record.durationSeconds, 0);
   const streak = currentStreak(records.map((record) => record.completedAt));
 
@@ -89,15 +85,8 @@ export function DashboardClient() {
             })}
           </div>
         ) : (
-          <div className="activity-empty"><Clock size={30} /><h3>No completed sessions</h3><p>A record appears only after 30 minutes of real visible-room time.</p><Link href="/rooms">Browse rooms <ArrowRight size={17} /></Link></div>
+          <div className="activity-empty"><Clock size={30} /><h3>No completed sessions</h3><p>A record appears only after 30 minutes of real joined-room time.</p><Link href="/rooms">Browse rooms <ArrowRight size={17} /></Link></div>
         )}
-      </section>
-
-      <section className="active-session-panel">
-        <div className="dashboard-section-heading"><div><span>Current session</span><h2>{activeRoom?.name ?? "No active session"}</h2></div><Clock size={27} /></div>
-        {activeSession && activeRoom && address ? (
-          <div className="active-session-detail"><strong>{formatFocus(activeSession.elapsedSeconds)}</strong><p>{activeSession.paused ? "Paused outside the visible room." : "Ready to continue in the room."}</p><div><Link href={`/rooms/${activeRoom.slug}`}>Return to room</Link><button type="button" onClick={() => cancelSession(address)}>Discard</button></div></div>
-        ) : <p className="active-session-empty">Join any room to begin automatic session tracking. No example timer is shown here.</p>}
       </section>
 
       <BadgeSection

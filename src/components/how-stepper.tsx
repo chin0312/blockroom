@@ -23,8 +23,8 @@ const steps = [
     title: "Accumulate focus time",
     short: "30 minutes",
     icon: "timer" as IconName,
-    description: "Joining starts the timer automatically. It advances only while the matching room page is open and the tab is visible.",
-    signal: "Visible-room seconds",
+    description: "Joining starts the timer automatically. It keeps advancing while you remain joined, so research, coding, and coursework in other tabs still count.",
+    signal: "Joined-room elapsed time",
   },
   {
     title: "Create wallet activity",
