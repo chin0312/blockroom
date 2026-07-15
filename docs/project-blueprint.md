@@ -1,8 +1,9 @@
 # BlockRoom Project Blueprint
 
 > Functional source of truth for the visual and experience refactor.
-> Generated from the current implementation, `docs/spec.md`, and `docs/design.md`.
-> Last audited: 2026-07-15.
+> Generated from the current implementation and `docs/spec.md`; visual direction
+> is now governed by the selection gate in the project-root `DESIGN.md`.
+> Last audited: 2026-07-16.
 
 ## 1. Product Definition
 
@@ -420,21 +421,19 @@ server-side profile, persistent chat table, or app-owned user database exists.
 No service-role key, private wallet key, signing key, or secret belongs in the
 client environment or Git history.
 
-## 10. Visual and Interaction Baseline
+## 10. Visual Reset Boundary
 
-- Light mode only.
-- Luminous ivory canvas, near-black display type, restrained violet signal.
-- Premium spatial UI with broad whitespace and a floating pearl capsule navigation.
-- Product illustrations use shared Ambient Network Atelier focus pods: frosted
-  pearl shells, translucent inner zones, soft grounded shadows, and quiet
-  lavender light. They communicate connection through proximity rather than
-  decorative network lines.
-- No decorative diagonal slashes, cyberpunk neon, trading-terminal patterns, or
-  traditional dense admin-dashboard language.
-- Buttons are tactile pills; product surfaces use consistent radii and subtle
-  depth.
-- Motion is limited to transform and opacity, generally 180 to 280 milliseconds,
-  with longer ambient motion restricted to major illustrative modules.
+- The previous BlockRoom visual direction is retired and is not a constraint on
+  the next refactor.
+- Cohere and ElevenLabs reference systems are stored under
+  `docs/design-references/`; neither is selected as the final direction until
+  the product owner gives a new instruction.
+- This blueprint remains authoritative for behavior and truthful state, not for
+  aesthetic style, palette, typography, materials, composition, or illustration.
+- The current CSS and visual components remain temporarily so the working MVP
+  is not broken before the visual refactor begins. They may be replaced in full.
+- Reworking visual structure must preserve routes, wallet identity, realtime
+  presence, WebRTC media, session recording, contribution history, and badges.
 - `prefers-reduced-motion` and `prefers-reduced-transparency` are respected.
 - Visible controls have text labels, not color-only status.
 - Focus rings remain visible and minimum control targets are 44 pixels.
@@ -455,8 +454,8 @@ client environment or Git history.
 | `src/app/rooms/page.tsx` | Room-directory route shell |
 | `src/app/rooms/[slug]/page.tsx` | Static room lookup, room metadata, joined-space entry |
 | `src/app/dashboard/page.tsx` | Dashboard route shell |
-| `src/app/globals.css` | Functional layout baseline and legacy component rules |
-| `src/app/atelier.css` | Selected Concept 03 visual system, spatial modules, responsive overrides, reduced-motion/transparency behavior |
+| `src/app/globals.css` | Current functional layout and legacy visual rules; replaceable in the next visual refactor |
+| `src/app/atelier.css` | Current temporary visual layer; explicitly not a future design constraint |
 
 ### Product components
 
