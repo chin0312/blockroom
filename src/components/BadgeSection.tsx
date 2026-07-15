@@ -9,7 +9,7 @@ import {
 } from "@phosphor-icons/react";
 import { useSignMessage } from "wagmi";
 import type { BadgeClaim } from "./session-provider";
-import { CrystalHardware } from "./crystal-hardware";
+import { AmbientModule } from "./ambient-module";
 
 type BadgeSectionProps = {
   address?: string;
@@ -87,7 +87,7 @@ export function BadgeSection({
           return (
             <article className={claim ? "badge-card signed" : eligible ? "badge-card eligible" : "badge-card locked"} key={badge.level}>
               <div className="badge-emblem" aria-hidden="true">
-                <CrystalHardware variant={claim ? "signature" : eligible ? "proof" : "identity"} size="mini" />
+                <AmbientModule variant={claim ? "signature" : eligible ? "proof" : "identity"} size="mini" />
                 <span>0{badge.level}</span>
               </div>
               <div className="badge-copy"><span>Level {badge.level}</span><h3>{badge.name}</h3><p>{badge.description}</p></div>

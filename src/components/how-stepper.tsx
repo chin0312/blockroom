@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { motion, useReducedMotion } from "motion/react";
 import { Icon, type IconName } from "./icons";
-import { CrystalHardware } from "./crystal-hardware";
+import { AmbientModule } from "./ambient-module";
 
 const steps = [
   {
@@ -106,7 +106,7 @@ export function HowStepper() {
           transition={{ duration: 0.42, ease: [0.16, 1, 0.3, 1] }}
         >
           <span className="schematic-index">{String(activeIndex + 1).padStart(2, "0")}</span>
-          <CrystalHardware
+          <AmbientModule
             variant={activeIndex === 0 ? "identity" : activeIndex === 1 ? "room" : activeIndex === 2 ? "time" : activeIndex === 3 ? "proof" : "signature"}
             size="panel"
           />

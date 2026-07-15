@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { Icon, type IconName } from "./icons";
-import { CrystalHardware } from "./crystal-hardware";
+import { AmbientModule } from "./ambient-module";
 
 const concepts = [
   {
@@ -85,7 +85,7 @@ export function AboutExplorer() {
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.42, ease: [0.16, 1, 0.3, 1] }}
         >
-          <CrystalHardware
+          <AmbientModule
             variant={active.id === "identity" ? "identity" : active.id === "proof" ? "proof" : "room"}
             size="panel"
           />

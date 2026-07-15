@@ -9,7 +9,7 @@ import { useAccount } from "wagmi";
 import { getRoom } from "@/lib/rooms";
 import { BadgeSection } from "./BadgeSection";
 import { ContributionGraph } from "./ContributionGraph";
-import { CrystalHardware } from "./crystal-hardware";
+import { AmbientModule } from "./ambient-module";
 import { useSession } from "./session-provider";
 
 function formatFocus(seconds: number) {
@@ -61,14 +61,14 @@ export function DashboardClient() {
   return (
     <div className="dashboard-product-grid">
       <section className="dashboard-identity-panel">
-        <div className="identity-protocol" aria-hidden="true"><CrystalHardware variant="identity" size="mini" /></div>
+        <div className="identity-protocol" aria-hidden="true"><AmbientModule variant="identity" size="card" /></div>
         <div><span>Wallet identity</span><h2>{isConnected && address ? `${address.slice(0, 6)}...${address.slice(-4)}` : "Not connected"}</h2><p>{isConnected ? chain?.name ?? "Network unavailable" : "Connect a wallet to load its local activity."}</p></div>
       </section>
 
       <div className="dashboard-stats">
-        <article><CrystalHardware variant="time" size="nano" /><span>Total Focus Time</span><strong>{isConnected ? formatFocus(totalSeconds) : "Connect wallet"}</strong></article>
-        <article><CrystalHardware variant="proof" size="nano" /><span>Current Streak</span><strong>{isConnected ? `${streak} ${streak === 1 ? "day" : "days"}` : "Connect wallet"}</strong></article>
-        <article><CrystalHardware variant="signature" size="nano" /><span>Total Badges Earned</span><strong>{isConnected ? claims.length : "Connect wallet"}</strong></article>
+        <article><AmbientModule variant="time" size="nano" /><span>Total Focus Time</span><strong>{isConnected ? formatFocus(totalSeconds) : "Connect wallet"}</strong></article>
+        <article><AmbientModule variant="proof" size="nano" /><span>Current Streak</span><strong>{isConnected ? `${streak} ${streak === 1 ? "day" : "days"}` : "Connect wallet"}</strong></article>
+        <article><AmbientModule variant="signature" size="nano" /><span>Total Badges Earned</span><strong>{isConnected ? claims.length : "Connect wallet"}</strong></article>
       </div>
 
       <ContributionGraph records={records} />
