@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { motion, useReducedMotion } from "motion/react";
 import { Icon, type IconName } from "./icons";
 
 const concepts = [
@@ -35,6 +36,7 @@ const concepts = [
 
 export function AboutExplorer() {
   const [activeId, setActiveId] = useState(concepts[0].id);
+  const reduceMotion = useReducedMotion();
   const active = concepts.find((concept) => concept.id === activeId) ?? concepts[0];
 
   return (
@@ -58,7 +60,13 @@ export function AboutExplorer() {
       </div>
 
       <div className="concept-panel" id="concept-panel" role="tabpanel">
-        <div className="concept-copy">
+        <motion.div
+          className="concept-copy"
+          key={`${active.id}-copy`}
+          initial={reduceMotion ? false : { opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.34, ease: [0.16, 1, 0.3, 1] }}
+        >
           <span className="section-label">{active.label}</span>
           <h2>{active.title}</h2>
           <p>{active.description}</p>
@@ -67,8 +75,15 @@ export function AboutExplorer() {
               <li key={point}><Icon name="check" size={18} /> {point}</li>
             ))}
           </ul>
-        </div>
-        <div className={`concept-diagram concept-diagram-${active.id}`} aria-hidden="true">
+        </motion.div>
+        <motion.div
+          className={`concept-diagram concept-diagram-${active.id}`}
+          key={`${active.id}-diagram`}
+          aria-hidden="true"
+          initial={reduceMotion ? false : { opacity: 0, scale: 0.97 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.42, ease: [0.16, 1, 0.3, 1] }}
+        >
           <div className="diagram-axis axis-x" />
           <div className="diagram-axis axis-y" />
           <div className="diagram-center"><Icon name={active.icon} size={34} /></div>
@@ -76,7 +91,7 @@ export function AboutExplorer() {
           <div className="diagram-node diagram-node-b" />
           <div className="diagram-node diagram-node-c" />
           <span className="diagram-caption">{active.label}</span>
-        </div>
+        </motion.div>
       </div>
     </section>
   );

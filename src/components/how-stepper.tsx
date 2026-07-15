@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { motion, useReducedMotion } from "motion/react";
 import { Icon, type IconName } from "./icons";
 
 const steps = [
@@ -44,6 +45,7 @@ const steps = [
 
 export function HowStepper() {
   const [activeIndex, setActiveIndex] = useState(0);
+  const reduceMotion = useReducedMotion();
   const active = steps[activeIndex];
 
   return (
@@ -65,7 +67,13 @@ export function HowStepper() {
         ))}
       </div>
       <div className="step-detail" id="how-step-panel" role="tabpanel">
-        <div className="step-detail-copy">
+        <motion.div
+          className="step-detail-copy"
+          key={`${active.title}-copy`}
+          initial={reduceMotion ? false : { opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.34, ease: [0.16, 1, 0.3, 1] }}
+        >
           <span className="section-label">Step {activeIndex + 1} of {steps.length}</span>
           <h2>{active.title}</h2>
           <p>{active.description}</p>
@@ -87,15 +95,22 @@ export function HowStepper() {
               <Link className="button button-primary" href="/rooms">Explore rooms <Icon name="arrow" size={18} /></Link>
             )}
           </div>
-        </div>
-        <div className="step-schematic" aria-hidden="true">
+        </motion.div>
+        <motion.div
+          className="step-schematic"
+          key={`${active.title}-schematic`}
+          aria-hidden="true"
+          initial={reduceMotion ? false : { opacity: 0, scale: 0.97 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.42, ease: [0.16, 1, 0.3, 1] }}
+        >
           <span className="schematic-index">{String(activeIndex + 1).padStart(2, "0")}</span>
           <div className="schematic-ring ring-outer" />
           <div className="schematic-ring ring-inner" />
           <div className="schematic-icon"><Icon name={active.icon} size={38} /></div>
           <div className="schematic-line" />
           <span className="schematic-signal">{active.signal}</span>
-        </div>
+        </motion.div>
       </div>
     </div>
   );

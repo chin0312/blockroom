@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { UsersThree } from "@phosphor-icons/react";
+import { motion, useReducedMotion } from "motion/react";
 import { useRoomOccupancy } from "@/hooks/use-room-occupancy";
 import { rooms, type RoomType } from "@/lib/rooms";
 import { Icon } from "./icons";
@@ -13,6 +14,7 @@ const filters: Filter[] = ["All", "Learning", "Co-working", "Hackathon"];
 
 export function RoomDirectory() {
   const [filter, setFilter] = useState<Filter>("All");
+  const reduceMotion = useReducedMotion();
   const { counts } = useRoomOccupancy(rooms.map((room) => room.slug));
   const visibleRooms = filter === "All" ? rooms : rooms.filter((room) => room.type === filter);
 
@@ -35,7 +37,14 @@ export function RoomDirectory() {
         {visibleRooms.map((room) => {
           const liveCount = counts[room.slug] ?? 0;
           const isFull = liveCount >= room.capacity;
-          return <Link className={isFull ? "directory-card full" : "directory-card"} href={`/rooms/${room.slug}`} key={room.slug}>
+          return <motion.div
+            className="directory-motion-item"
+            key={room.slug}
+            initial={reduceMotion ? false : { opacity: 0, y: 22 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.14 }}
+            transition={{ duration: 0.48, delay: reduceMotion ? 0 : (rooms.indexOf(room) % 4) * 0.045, ease: [0.16, 1, 0.3, 1] }}
+          ><Link className={isFull ? "directory-card full" : "directory-card"} href={`/rooms/${room.slug}`}>
             <RoomVisual room={room} />
             <div className="directory-content">
               <div className="directory-meta">
@@ -49,7 +58,7 @@ export function RoomDirectory() {
               <p>{room.description}</p>
               <span className="card-link">{isFull ? "View full room" : "Enter room"} <Icon name="arrow" size={18} /></span>
             </div>
-          </Link>;
+          </Link></motion.div>;
         })}
       </div>
     </>

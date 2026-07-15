@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { Icon } from "@/components/icons";
+import { MotionReveal } from "@/components/motion-reveal";
 import { WalletControl } from "@/components/wallet-control";
 
 export default function HomePage() {
   return (
     <div className="page-enter home-page">
       <section className="home-hero page-frame">
-        <div className="home-hero-copy">
+        <MotionReveal className="home-hero-copy" depth={18}>
           <span className="section-label">Web3 co-learning, without invented activity</span>
           <h1>Focus together.<br />Keep the proof.</h1>
           <p>
@@ -19,9 +20,9 @@ export default function HomePage() {
             </Link>
             <WalletControl placement="hero" />
           </div>
-        </div>
+        </MotionReveal>
 
-        <div className="product-preview" aria-label="BlockRoom product preview">
+        <MotionReveal className="product-preview" delay={0.08} depth={28} ariaLabel="BlockRoom product preview">
           <div className="preview-header">
             <span>ROOM / REALTIME CONTEXT</span>
             <span className="open-pill">Join to load presence</span>
@@ -45,7 +46,7 @@ export default function HomePage() {
             <span><i className="truth-dot" /> Real members only</span>
             <span>Local record after 30:00</span>
           </div>
-        </div>
+        </MotionReveal>
       </section>
 
       <section className="home-index page-frame" aria-label="Explore BlockRoom">
