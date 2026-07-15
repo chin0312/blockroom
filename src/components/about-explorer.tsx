@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { Icon, type IconName } from "./icons";
+import { CrystalHardware } from "./crystal-hardware";
 
 const concepts = [
   {
@@ -84,12 +85,10 @@ export function AboutExplorer() {
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.42, ease: [0.16, 1, 0.3, 1] }}
         >
-          <div className="diagram-axis axis-x" />
-          <div className="diagram-axis axis-y" />
-          <div className="diagram-center"><Icon name={active.icon} size={34} /></div>
-          <div className="diagram-node diagram-node-a" />
-          <div className="diagram-node diagram-node-b" />
-          <div className="diagram-node diagram-node-c" />
+          <CrystalHardware
+            variant={active.id === "identity" ? "identity" : active.id === "proof" ? "proof" : "room"}
+            size="panel"
+          />
           <span className="diagram-caption">{active.label}</span>
         </motion.div>
       </div>

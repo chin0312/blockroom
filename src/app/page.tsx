@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { CrystalHardware } from "@/components/crystal-hardware";
 import { Icon } from "@/components/icons";
 import { MotionReveal } from "@/components/motion-reveal";
 import { WalletControl } from "@/components/wallet-control";
@@ -29,11 +30,7 @@ export default function HomePage() {
           </div>
           <div className="preview-main">
             <div className="preview-room-map" aria-hidden="true">
-              <span className="map-grid" />
-              <span className="map-seat seat-one" />
-              <span className="map-seat seat-two" />
-              <span className="map-seat seat-three" />
-              <span className="map-center"><Icon name="book" size={30} /></span>
+              <CrystalHardware variant="room" size="hero" />
             </div>
             <div className="preview-console">
               <span>JOINED ROOM TIME</span>
@@ -53,16 +50,19 @@ export default function HomePage() {
         <Link className="index-card index-card-dark" href="/about">
           <span className="index-number">01</span>
           <div><span>Understand the model</span><h2>What is BlockRoom?</h2></div>
+          <CrystalHardware variant="identity" size="nano" />
           <Icon name="arrow" />
         </Link>
         <Link className="index-card" href="/rooms">
           <span className="index-number">02</span>
           <div><span>Join a real context</span><h2>Explore Rooms</h2></div>
+          <CrystalHardware variant="room" size="nano" />
           <Icon name="arrow" />
         </Link>
         <Link className="index-card index-card-accent" href="/dashboard">
           <span className="index-number">03</span>
           <div><span>Inspect real state</span><h2>Open Dashboard</h2></div>
+          <CrystalHardware variant="proof" size="nano" />
           <Icon name="arrow" />
         </Link>
       </section>

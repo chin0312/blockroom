@@ -25,6 +25,7 @@ import { useRoomRealtime } from "@/hooks/use-room-realtime";
 import { shortAddress } from "@/lib/realtime-types";
 import type { Room } from "@/lib/rooms";
 import { ActiveMembers } from "./ActiveMembers";
+import { CrystalHardware } from "./crystal-hardware";
 import { REQUIRED_SESSION_SECONDS, useSession } from "./session-provider";
 import { WalletControl } from "./wallet-control";
 
@@ -185,12 +186,7 @@ export function RoomSessionPanel({ room }: { room: Room }) {
     return (
       <section className="join-space-panel">
         <div className="join-space-visual" aria-hidden="true">
-          <span className="protocol-orbit orbit-one" />
-          <span className="protocol-orbit orbit-two" />
-          <div className="protocol-core"><UsersThree size={46} weight="light" /></div>
-          <span className="protocol-node node-one" />
-          <span className="protocol-node node-two" />
-          <span className="protocol-node node-three" />
+          <CrystalHardware variant="room" size="panel" />
         </div>
         <div className="join-space-copy">
           <span className="product-kicker">Realtime space</span>
