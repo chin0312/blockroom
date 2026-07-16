@@ -25,23 +25,37 @@ export default function HomePage() {
 
         <MotionReveal className="product-preview" delay={0.08} depth={28} ariaLabel="BlockRoom product preview">
           <div className="preview-header">
-            <span>ROOM / REALTIME CONTEXT</span>
-            <span className="open-pill">Join to load presence</span>
+            <div><span className="preview-brand-dot" /> BlockRoom</div>
+            <span className="preview-timer">00:00</span>
           </div>
           <div className="preview-main">
-            <div className="preview-room-map" aria-hidden="true">
-              <AmbientModule variant="room" size="hero" />
+            <div className="preview-room-stage">
+              <div className="preview-room-meta"><strong>Learning Room 1</strong><span><i className="truth-dot" /> 0/6 live</span></div>
+              <div className="preview-empty-state">
+                <span className="preview-empty-icon"><Icon name="group" size={25} /></span>
+                <strong>Empty room</strong>
+                <small>Join to load real presence.</small>
+              </div>
             </div>
-            <div className="preview-console">
-              <span>JOINED ROOM TIME</span>
-              <strong>00:00</strong>
-              <div className="preview-progress"><i /></div>
-              <small>Complete unlocks at 30:00</small>
+            <div className="preview-side-panel">
+              <div className="preview-tabs"><span className="active">Active members</span><span>Discussions</span></div>
+              <div className="preview-empty-state compact">
+                <Icon name="group" size={25} />
+                <strong>No one here yet</strong>
+                <small>Real members appear after joining.</small>
+              </div>
             </div>
           </div>
+          <div className="preview-control-dock" aria-hidden="true">
+            <span><Icon name="group" size={17} /></span>
+            <span><Icon name="play" size={17} /></span>
+            <span><Icon name="dashboard" size={17} /></span>
+            <i />
+            <span><Icon name="empty" size={17} /></span>
+          </div>
           <div className="preview-footer">
-            <span><i className="truth-dot" /> Real members only</span>
-            <span>Local record after 30:00</span>
+            <span>Explanatory preview</span>
+            <span>Same-browser tab mode when Supabase is unavailable</span>
           </div>
         </MotionReveal>
       </section>

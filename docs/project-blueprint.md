@@ -1,8 +1,8 @@
 # BlockRoom Project Blueprint
 
-> Functional source of truth for the visual and experience refactor.
-> Generated from the current implementation and `docs/spec.md`; visual direction
-> is now governed by the selection gate in the project-root `DESIGN.md`.
+> Functional source of truth for BlockRoom's product behavior and truthful state.
+> The active visual direction is defined by
+> `docs/design-references/elevenlabs/DESIGN.md` and the approved product reference.
 > Last audited: 2026-07-16.
 
 ## 1. Product Definition
@@ -421,19 +421,17 @@ server-side profile, persistent chat table, or app-owned user database exists.
 No service-role key, private wallet key, signing key, or secret belongs in the
 client environment or Git history.
 
-## 10. Visual Reset Boundary
+## 10. Active Visual Direction
 
-- The previous BlockRoom visual direction is retired and is not a constraint on
-  the next refactor.
-- Cohere and ElevenLabs reference systems are stored under
-  `docs/design-references/`; neither is selected as the final direction until
-  the product owner gives a new instruction.
-- This blueprint remains authoritative for behavior and truthful state, not for
-  aesthetic style, palette, typography, materials, composition, or illustration.
-- The current CSS and visual components remain temporarily so the working MVP
-  is not broken before the visual refactor begins. They may be replaced in full.
-- Reworking visual structure must preserve routes, wallet identity, realtime
-  presence, WebRTC media, session recording, contribution history, and badges.
+- BlockRoom uses the finalized ElevenLabs Editorial Spatial UI direction.
+- `docs/design-references/elevenlabs/DESIGN.md` is the active design-system
+  reference; the approved `Generated image 3.png` is the composition reference.
+- This blueprint remains authoritative for behavior and truthful state.
+- Visual refinements must preserve routes, wallet identity, realtime presence,
+  WebRTC media, session recording, contribution history, and badges.
+- The visual system uses warm off-white canvas, lightweight editorial serif
+  display type, neutral sans-serif UI type, hairline borders, ink pill actions,
+  restrained atmospheric color, and quiet spatial motion.
 - `prefers-reduced-motion` and `prefers-reduced-transparency` are respected.
 - Visible controls have text labels, not color-only status.
 - Focus rings remain visible and minimum control targets are 44 pixels.
@@ -454,8 +452,7 @@ client environment or Git history.
 | `src/app/rooms/page.tsx` | Room-directory route shell |
 | `src/app/rooms/[slug]/page.tsx` | Static room lookup, room metadata, joined-space entry |
 | `src/app/dashboard/page.tsx` | Dashboard route shell |
-| `src/app/globals.css` | Current functional layout and legacy visual rules; replaceable in the next visual refactor |
-| `src/app/atelier.css` | Current temporary visual layer; explicitly not a future design constraint |
+| `src/app/globals.css` | Active ElevenLabs Editorial design tokens, responsive layouts, motion and component styling |
 
 ### Product components
 

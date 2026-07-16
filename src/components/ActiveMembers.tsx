@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   MicrophoneSlash,
   MonitorArrowUp,
@@ -25,11 +25,94 @@ const statusLabel = {
 };
 
 function StreamPlayer({ stream, muted, video }: { stream: MediaStream; muted: boolean; video: boolean }) {
-  const connectStream = (node: HTMLMediaElement | null) => {
-    if (node) node.srcObject = stream;
-  };
-  if (!video) return <audio ref={connectStream} autoPlay muted={muted} />;
-  return <video ref={connectStream} autoPlay muted={muted} playsInline />;
+  const mediaRef = useRef<HTMLMediaElement | null>(null);
+
+  useLayoutEffect(() => {
+    const node = mediaRef.current;
+    if (!node) return;
+    if (node.srcObject !== stream) node.srcObject = stream;
+
+    const resumePlayback = () => {
+      void node.play().catch(() => {
+        // Browsers can briefly defer autoplay while entering fullscreen.
+        // The loadeddata/canplay events below retry without replacing srcObject.
+      });
+    };
+
+    resumePlayback();
+    node.addEventListener("loadeddata", resumePlayback);
+    node.addEventListener("canplay", resumePlayback);
+    return () => {
+      node.removeEventListener("loadeddata", resumePlayback);
+      node.removeEventListener("canplay", resumePlayback);
+      if (node.srcObject === stream) node.srcObject = null;
+    };
+  }, [stream]);
+
+  if (!video) return <audio ref={mediaRef as React.RefObject<HTMLAudioElement | null>} autoPlay muted={muted} />;
+  return <video ref={mediaRef as React.RefObject<HTMLVideoElement | null>} autoPlay muted={muted} playsInline preload="auto" />;
+}
+
+function useSpeakingActivity(stream: MediaStream | null | undefined, enabled: boolean) {
+  const [speaking, setSpeaking] = useState(false);
+
+  useEffect(() => {
+    const audioTrack = stream?.getAudioTracks().find((track) => track.readyState === "live");
+    if (!audioTrack || !enabled) {
+      queueMicrotask(() => setSpeaking(false));
+      return;
+    }
+
+    const AudioContextClass = window.AudioContext;
+    if (!AudioContextClass) return;
+    const context = new AudioContextClass();
+    const analyser = context.createAnalyser();
+    const source = context.createMediaStreamSource(new MediaStream([audioTrack]));
+    const samples = new Uint8Array(analyser.fftSize);
+    let animationFrame = 0;
+    let speakingFrames = 0;
+    let quietFrames = 0;
+    let lastState = false;
+
+    analyser.fftSize = 256;
+    analyser.smoothingTimeConstant = 0.82;
+    source.connect(analyser);
+    void context.resume().catch(() => undefined);
+
+    const measure = () => {
+      analyser.getByteTimeDomainData(samples);
+      let squareSum = 0;
+      for (const sample of samples) {
+        const normalized = (sample - 128) / 128;
+        squareSum += normalized * normalized;
+      }
+      const rms = Math.sqrt(squareSum / samples.length);
+      if (rms > 0.035) {
+        speakingFrames += 1;
+        quietFrames = 0;
+      } else {
+        quietFrames += 1;
+        speakingFrames = 0;
+      }
+      const nextState = lastState ? quietFrames < 9 : speakingFrames >= 3;
+      if (nextState !== lastState) {
+        lastState = nextState;
+        setSpeaking(nextState);
+      }
+      animationFrame = window.requestAnimationFrame(measure);
+    };
+    animationFrame = window.requestAnimationFrame(measure);
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      source.disconnect();
+      analyser.disconnect();
+      void context.close();
+      setSpeaking(false);
+    };
+  }, [enabled, stream]);
+
+  return speaking;
 }
 
 function MemberTile({
@@ -48,8 +131,9 @@ function MemberTile({
   onPin: () => void;
 }) {
   const hasVideo = Boolean(stream && (member.cameraOn || member.sharing));
+  const speaking = useSpeakingActivity(stream, !member.muted);
   return (
-    <article className={`meeting-tile${primary ? " primary" : ""}${member.sharing ? " sharing" : ""}`}>
+    <article className={`meeting-tile${primary ? " primary" : ""}${member.sharing ? " sharing" : ""}${speaking ? " speaking" : ""}`}>
       <div className="meeting-media">
         {stream && hasVideo ? (
           <StreamPlayer stream={stream} muted={isCurrent} video />
@@ -70,6 +154,7 @@ function MemberTile({
           <span>{isPinned ? "Unpin" : "Pin"}</span>
         </button>
         {member.sharing && <span className="share-label"><MonitorArrowUp size={15} /> Screen sharing</span>}
+        {speaking && <span className="speaking-indicator" aria-label="Speaking"><i /><i /><i /></span>}
         <span className={`member-state ${member.status}`} aria-label={statusLabel[member.status]} />
       </div>
       <footer className="meeting-tile-footer">

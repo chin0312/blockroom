@@ -8,10 +8,10 @@ import { Icon } from "./icons";
 import { WalletControl } from "./wallet-control";
 
 const navigation = [
-  { href: "/", label: "Home" },
-  { href: "/about", label: "What is BlockRoom" },
-  { href: "/rooms", label: "Rooms" },
-  { href: "/dashboard", label: "Dashboard" },
+  { href: "/", label: "Home", icon: "cube" as const },
+  { href: "/about", label: "What is BlockRoom", icon: "spark" as const },
+  { href: "/rooms", label: "Rooms", icon: "group" as const },
+  { href: "/dashboard", label: "Dashboard", icon: "dashboard" as const },
 ];
 
 export function SiteHeader() {
@@ -35,6 +35,7 @@ export function SiteHeader() {
               className={isActive(item.href) ? "nav-link active" : "nav-link"}
               aria-current={isActive(item.href) ? "page" : undefined}
             >
+              <Icon name={item.icon} size={18} />
               {item.label}
             </Link>
           ))}
@@ -62,6 +63,7 @@ export function SiteHeader() {
               aria-current={isActive(item.href) ? "page" : undefined}
               onClick={() => setMenuOpen(false)}
             >
+              <Icon name={item.icon} size={18} />
               {item.label}
               <Icon name="arrow" size={18} />
             </Link>

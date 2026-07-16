@@ -9,14 +9,17 @@ type AmbientVariant =
 
 type AmbientSize = "hero" | "panel" | "card" | "mini" | "nano";
 
-function Satellite({ className }: { className: string }) {
-  return (
-    <span className={`ambient-satellite ${className}`}>
-      <i className="ambient-satellite-shell" />
-      <i className="ambient-satellite-light" />
-    </span>
-  );
-}
+import { Icon, type IconName } from "./icons";
+
+const variantIcons: Record<AmbientVariant, IconName> = {
+  identity: "wallet",
+  room: "group",
+  time: "timer",
+  proof: "shield",
+  signature: "check",
+  coworking: "briefcase",
+  hackathon: "cube",
+};
 
 export function AmbientModule({
   variant = "room",
@@ -32,23 +35,8 @@ export function AmbientModule({
       className={`ambient-module ambient-${variant} ambient-size-${size} ${className}`.trim()}
       aria-hidden="true"
     >
-      <span className="ambient-haze" />
-      <span className="ambient-ground">
-        <i className="ambient-terrain ambient-terrain-a" />
-        <i className="ambient-terrain ambient-terrain-b" />
-        <span className="ambient-pod">
-          <i className="ambient-pod-back" />
-          <i className="ambient-pod-window" />
-          <i className="ambient-pod-seat" />
-          <i className="ambient-pod-core" />
-        </span>
-        <Satellite className="ambient-satellite-a" />
-        <Satellite className="ambient-satellite-b" />
-        <Satellite className="ambient-satellite-c" />
-        <Satellite className="ambient-satellite-d" />
-        <i className="ambient-pebble ambient-pebble-a" />
-        <i className="ambient-pebble ambient-pebble-b" />
-      </span>
+      <span className="ambient-bloom" />
+      <span className="ambient-glyph"><Icon name={variantIcons[variant]} size={size === "nano" ? 18 : size === "mini" ? 22 : 28} /></span>
     </div>
   );
 }

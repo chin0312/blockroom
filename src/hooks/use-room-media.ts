@@ -124,8 +124,11 @@ export function useRoomMedia({
   }, []);
 
   const refreshPreview = useCallback(() => {
-    const track = screenTrackRef.current ?? cameraTrackRef.current;
-    setPreviewStream(track ? new MediaStream([track]) : null);
+    const tracks = [
+      screenTrackRef.current ?? cameraTrackRef.current,
+      microphoneTrackRef.current,
+    ].filter((track): track is MediaStreamTrack => Boolean(track && track.readyState === "live"));
+    setPreviewStream(tracks.length ? new MediaStream(tracks) : null);
   }, []);
 
   const stopScreenShare = useCallback(async () => {
@@ -146,18 +149,22 @@ export function useRoomMedia({
           const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
           track = stream.getAudioTracks()[0] ?? null;
           microphoneTrackRef.current = track;
+          if (track) track.enabled = true;
           await replaceOutboundTrack("audio", track);
+        } else {
+          track.enabled = true;
         }
-        if (track) track.enabled = true;
+        refreshPreview();
         await updateMember({ muted: false });
       } else {
         if (microphoneTrackRef.current) microphoneTrackRef.current.enabled = false;
+        refreshPreview();
         await updateMember({ muted: true });
       }
     } catch (error) {
       setMediaError(error instanceof Error ? error.message : "Microphone permission was not granted.");
     }
-  }, [replaceOutboundTrack, updateMember]);
+  }, [refreshPreview, replaceOutboundTrack, updateMember]);
 
   const toggleCamera = useCallback(async (currentlyOn: boolean) => {
     setMediaError(null);
@@ -193,12 +200,19 @@ export function useRoomMedia({
       const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
       const track = stream.getVideoTracks()[0] ?? null;
       if (!track) throw new Error("No screen video track was provided.");
+      track.contentHint = "detail";
       screenTrackRef.current = track;
-      await replaceOutboundTrack("video", track);
       refreshPreview();
+      await replaceOutboundTrack("video", track);
       await updateMember({ sharing: true });
       track.addEventListener("ended", () => void stopScreenShare(), { once: true });
     } catch (error) {
+      const failedTrack = screenTrackRef.current;
+      screenTrackRef.current = null;
+      if (failedTrack) failedTrack.stop();
+      refreshPreview();
+      await replaceOutboundTrack("video", cameraTrackRef.current).catch(() => undefined);
+      await updateMember({ sharing: false }).catch(() => undefined);
       setMediaError(error instanceof Error ? error.message : "Screen sharing permission was not granted.");
     }
   }, [refreshPreview, replaceOutboundTrack, stopScreenShare, updateMember]);

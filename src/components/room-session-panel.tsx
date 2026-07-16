@@ -25,7 +25,7 @@ import { useRoomRealtime } from "@/hooks/use-room-realtime";
 import { shortAddress } from "@/lib/realtime-types";
 import type { Room } from "@/lib/rooms";
 import { ActiveMembers } from "./ActiveMembers";
-import { AmbientModule } from "./ambient-module";
+import { RoomVisual } from "./room-visual";
 import { REQUIRED_SESSION_SECONDS, useSession } from "./session-provider";
 import { WalletControl } from "./wallet-control";
 
@@ -186,7 +186,7 @@ export function RoomSessionPanel({ room }: { room: Room }) {
     return (
       <section className="join-space-panel">
         <div className="join-space-visual" aria-hidden="true">
-          <AmbientModule variant="room" size="panel" />
+          <RoomVisual room={room} />
         </div>
         <div className="join-space-copy">
           <span className="product-kicker">Realtime space</span>

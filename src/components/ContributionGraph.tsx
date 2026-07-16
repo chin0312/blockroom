@@ -165,8 +165,8 @@ export function ContributionGraph({ records }: ContributionGraphProps) {
             0,
           );
           const ratio = Math.min(1, totalSeconds / DAY_SECONDS);
-          const fillAlpha = totalSeconds > 0 ? 0.08 + ratio * 0.84 : 0.025;
-          const borderAlpha = totalSeconds > 0 ? 0.16 + ratio * 0.7 : 0.08;
+          const fillAlpha = totalSeconds > 0 ? 0.18 + ratio * 0.78 : 0.09;
+          const borderAlpha = totalSeconds > 0 ? 0.22 + ratio * 0.58 : 0.12;
           const isSelected = selectedDateKey === dateKey;
           const ariaDuration = totalSeconds > 0 ? formatDuration(totalSeconds) : "no recorded time";
 
@@ -181,9 +181,9 @@ export function ContributionGraph({ records }: ContributionGraphProps) {
               title={`${date.toLocaleDateString()}: ${ariaDuration}`}
               onClick={() => setSelectedDateKey(dateKey)}
               style={{
-                backgroundColor: `rgba(118, 103, 247, ${fillAlpha})`,
-                borderColor: `rgba(118, 103, 247, ${borderAlpha})`,
-                color: ratio >= 0.48 ? "white" : undefined,
+                backgroundColor: `rgba(58, 175, 159, ${fillAlpha})`,
+                borderColor: `rgba(31, 132, 121, ${borderAlpha})`,
+                color: ratio >= 0.58 ? "white" : undefined,
               }}
             >
               <span>{day}</span>
