@@ -165,7 +165,7 @@ export function ContributionGraph({ records }: ContributionGraphProps) {
             0,
           );
           const ratio = Math.min(1, totalSeconds / DAY_SECONDS);
-          const fillAlpha = totalSeconds > 0 ? 0.18 + ratio * 0.78 : 0.09;
+          const fillAlpha = totalSeconds > 0 ? 0.18 + ratio * 0.78 : 0.015;
           const borderAlpha = totalSeconds > 0 ? 0.22 + ratio * 0.58 : 0.12;
           const isSelected = selectedDateKey === dateKey;
           const ariaDuration = totalSeconds > 0 ? formatDuration(totalSeconds) : "no recorded time";

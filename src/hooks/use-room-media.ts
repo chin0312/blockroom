@@ -38,6 +38,7 @@ export function useRoomMedia({
   updateMember: (updates: Partial<Pick<RoomMember, "muted" | "sharing" | "cameraOn">>) => Promise<void>;
 }) {
   const peersRef = useRef(new Map<string, PeerState>());
+  const remoteStreamRefs = useRef(new Map<string, MediaStream>());
   const outboundStreamRef = useRef<MediaStream | null>(null);
   const microphoneTrackRef = useRef<MediaStreamTrack | null>(null);
   const cameraTrackRef = useRef<MediaStreamTrack | null>(null);
@@ -76,11 +77,30 @@ export function useRoomMedia({
       if (candidate) void publishSignal(remoteId, { kind: "ice", candidate: candidate.toJSON() });
     };
     pc.ontrack = (event) => {
-      const stream = event.streams[0] ?? new MediaStream([event.track]);
+      const stream = remoteStreamRefs.current.get(remoteId) ?? new MediaStream();
+      remoteStreamRefs.current.set(remoteId, stream);
+      const incomingTracks = event.streams[0]?.getTracks() ?? [event.track];
+      incomingTracks.forEach((track) => {
+        if (!stream.getTracks().some((current) => current.id === track.id)) stream.addTrack(track);
+      });
       setRemoteStreams((current) => ({ ...current, [remoteId]: stream }));
+
+      event.track.addEventListener("ended", () => {
+        if (stream.getTracks().some((track) => track.id === event.track.id)) stream.removeTrack(event.track);
+        setRemoteStreams((current) => {
+          if (stream.getTracks().some((track) => track.readyState === "live")) {
+            return { ...current, [remoteId]: stream };
+          }
+          remoteStreamRefs.current.delete(remoteId);
+          const next = { ...current };
+          delete next[remoteId];
+          return next;
+        });
+      }, { once: true });
     };
     pc.onconnectionstatechange = () => {
-      if (["failed", "closed", "disconnected"].includes(pc.connectionState)) {
+      if (["failed", "closed"].includes(pc.connectionState)) {
+        remoteStreamRefs.current.delete(remoteId);
         setRemoteStreams((current) => {
           const next = { ...current };
           delete next[remoteId];
@@ -131,8 +151,9 @@ export function useRoomMedia({
     setPreviewStream(tracks.length ? new MediaStream(tracks) : null);
   }, []);
 
-  const stopScreenShare = useCallback(async () => {
+  const stopScreenShare = useCallback(async (expectedTrack?: MediaStreamTrack) => {
     const screenTrack = screenTrackRef.current;
+    if (expectedTrack && screenTrack !== expectedTrack) return;
     screenTrackRef.current = null;
     if (screenTrack) screenTrack.stop();
     await replaceOutboundTrack("video", cameraTrackRef.current);
@@ -205,7 +226,7 @@ export function useRoomMedia({
       refreshPreview();
       await replaceOutboundTrack("video", track);
       await updateMember({ sharing: true });
-      track.addEventListener("ended", () => void stopScreenShare(), { once: true });
+      track.addEventListener("ended", () => void stopScreenShare(track), { once: true });
     } catch (error) {
       const failedTrack = screenTrackRef.current;
       screenTrackRef.current = null;
@@ -270,6 +291,7 @@ export function useRoomMedia({
       if (remoteIds.has(remoteId)) return;
       peer.pc.close();
       peersRef.current.delete(remoteId);
+      remoteStreamRefs.current.delete(remoteId);
       setRemoteStreams((current) => {
         const next = { ...current };
         delete next[remoteId];
@@ -289,6 +311,7 @@ export function useRoomMedia({
     outboundStreamRef.current = null;
     peersRef.current.forEach(({ pc }) => pc.close());
     peersRef.current.clear();
+    remoteStreamRefs.current.clear();
     setPreviewStream(null);
     setRemoteStreams({});
   }, []);

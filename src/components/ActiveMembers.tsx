@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import {
   MicrophoneSlash,
   MonitorArrowUp,
@@ -9,6 +9,7 @@ import {
   UserCircle,
   VideoCamera,
 } from "@phosphor-icons/react";
+import { motion, useReducedMotion } from "motion/react";
 import { shortAddress, type RoomMember } from "@/lib/realtime-types";
 
 type ActiveMembersProps = {
@@ -47,19 +48,19 @@ function StreamPlayer({ stream, muted, video }: { stream: MediaStream; muted: bo
       node.removeEventListener("canplay", resumePlayback);
       if (node.srcObject === stream) node.srcObject = null;
     };
-  }, [stream]);
+  }, [muted, stream, video]);
 
   if (!video) return <audio ref={mediaRef as React.RefObject<HTMLAudioElement | null>} autoPlay muted={muted} />;
   return <video ref={mediaRef as React.RefObject<HTMLVideoElement | null>} autoPlay muted={muted} playsInline preload="auto" />;
 }
 
 function useSpeakingActivity(stream: MediaStream | null | undefined, enabled: boolean) {
-  const [speaking, setSpeaking] = useState(false);
+  const [activity, setActivity] = useState({ speaking: false, level: 0 });
 
   useEffect(() => {
     const audioTrack = stream?.getAudioTracks().find((track) => track.readyState === "live");
     if (!audioTrack || !enabled) {
-      queueMicrotask(() => setSpeaking(false));
+      queueMicrotask(() => setActivity({ speaking: false, level: 0 }));
       return;
     }
 
@@ -68,11 +69,15 @@ function useSpeakingActivity(stream: MediaStream | null | undefined, enabled: bo
     const context = new AudioContextClass();
     const analyser = context.createAnalyser();
     const source = context.createMediaStreamSource(new MediaStream([audioTrack]));
-    const samples = new Uint8Array(analyser.fftSize);
+    const samples = new Float32Array(analyser.fftSize);
     let animationFrame = 0;
     let speakingFrames = 0;
     let quietFrames = 0;
     let lastState = false;
+    let smoothedLevel = 0;
+    let noiseFloor = 0.008;
+    let lastPublishedLevel = 0;
+    let lastPublishedAt = 0;
 
     analyser.fftSize = 256;
     analyser.smoothingTimeConstant = 0.82;
@@ -80,24 +85,37 @@ function useSpeakingActivity(stream: MediaStream | null | undefined, enabled: bo
     void context.resume().catch(() => undefined);
 
     const measure = () => {
-      analyser.getByteTimeDomainData(samples);
+      analyser.getFloatTimeDomainData(samples);
       let squareSum = 0;
       for (const sample of samples) {
-        const normalized = (sample - 128) / 128;
-        squareSum += normalized * normalized;
+        squareSum += sample * sample;
       }
       const rms = Math.sqrt(squareSum / samples.length);
-      if (rms > 0.035) {
+      smoothedLevel = smoothedLevel * 0.72 + rms * 0.28;
+      const threshold = Math.max(0.018, Math.min(0.075, noiseFloor * 2.4 + 0.006));
+      if (smoothedLevel < threshold) noiseFloor = noiseFloor * 0.97 + smoothedLevel * 0.03;
+
+      if (smoothedLevel > threshold) {
         speakingFrames += 1;
         quietFrames = 0;
       } else {
         quietFrames += 1;
         speakingFrames = 0;
       }
-      const nextState = lastState ? quietFrames < 9 : speakingFrames >= 3;
-      if (nextState !== lastState) {
-        lastState = nextState;
-        setSpeaking(nextState);
+      const nextState = lastState ? quietFrames < 10 : speakingFrames >= 3;
+      const stateChanged = nextState !== lastState;
+      lastState = nextState;
+      const normalizedLevel = nextState
+        ? Math.min(1, Math.max(0.08, (smoothedLevel - threshold) / Math.max(0.04, 0.16 - threshold)))
+        : 0;
+      const now = performance.now();
+      if (
+        stateChanged ||
+        now - lastPublishedAt > 55 && Math.abs(normalizedLevel - lastPublishedLevel) > 0.035
+      ) {
+        lastPublishedAt = now;
+        lastPublishedLevel = normalizedLevel;
+        setActivity({ speaking: nextState, level: normalizedLevel });
       }
       animationFrame = window.requestAnimationFrame(measure);
     };
@@ -108,11 +126,10 @@ function useSpeakingActivity(stream: MediaStream | null | undefined, enabled: bo
       source.disconnect();
       analyser.disconnect();
       void context.close();
-      setSpeaking(false);
     };
   }, [enabled, stream]);
 
-  return speaking;
+  return activity;
 }
 
 function MemberTile({
@@ -130,10 +147,18 @@ function MemberTile({
   primary?: boolean;
   onPin: () => void;
 }) {
-  const hasVideo = Boolean(stream && (member.cameraOn || member.sharing));
-  const speaking = useSpeakingActivity(stream, !member.muted);
+  const reduceMotion = useReducedMotion();
+  const liveVideoTrack = stream?.getVideoTracks().find((track) => track.readyState === "live" && track.enabled);
+  const hasVideo = Boolean(liveVideoTrack);
+  const isScreenShare = Boolean(member.sharing || liveVideoTrack?.getSettings().displaySurface);
+  const { speaking, level } = useSpeakingActivity(stream, !member.muted);
   return (
-    <article className={`meeting-tile${primary ? " primary" : ""}${member.sharing ? " sharing" : ""}${speaking ? " speaking" : ""}`}>
+    <motion.article
+      layout={reduceMotion ? false : "position"}
+      transition={{ layout: { duration: 0.32, ease: [0.16, 1, 0.3, 1] } }}
+      className={`meeting-tile${primary ? " primary" : ""}${isScreenShare ? " sharing" : ""}${speaking ? " speaking" : ""}`}
+      style={{ "--voice-level": level } as CSSProperties}
+    >
       <div className="meeting-media">
         {stream && hasVideo ? (
           <StreamPlayer stream={stream} muted={isCurrent} video />
@@ -153,7 +178,7 @@ function MemberTile({
           {isPinned ? <PushPinSlash size={18} /> : <PushPin size={18} />}
           <span>{isPinned ? "Unpin" : "Pin"}</span>
         </button>
-        {member.sharing && <span className="share-label"><MonitorArrowUp size={15} /> Screen sharing</span>}
+        {isScreenShare && <span className="share-label"><MonitorArrowUp size={15} /> Screen sharing</span>}
         {speaking && <span className="speaking-indicator" aria-label="Speaking"><i /><i /><i /></span>}
         <span className={`member-state ${member.status}`} aria-label={statusLabel[member.status]} />
       </div>
@@ -169,7 +194,7 @@ function MemberTile({
           {member.sharing && <span className="sharing" title="Sharing screen"><MonitorArrowUp size={16} /></span>}
         </div>
       </footer>
-    </article>
+    </motion.article>
   );
 }
 
@@ -210,31 +235,23 @@ export function ActiveMembers({
   const pinnedMember = members.find((member) => member.clientId === pinnedClientId);
   const streamFor = (member: RoomMember) =>
     member.clientId === currentClientId ? localStream : remoteStreams[member.clientId];
-  const renderTile = (member: RoomMember, primary = false) => (
+  const renderTile = (member: RoomMember) => (
     <MemberTile
       key={member.clientId}
       member={member}
       stream={streamFor(member)}
       isCurrent={member.clientId === currentClientId}
       isPinned={member.clientId === pinnedClientId}
-      primary={primary}
+      primary={member.clientId === pinnedClientId}
       onPin={() => setPinnedClientId((current) => current === member.clientId ? null : member.clientId)}
     />
   );
 
-  if (pinnedMember) {
-    return (
-      <div className={`meeting-stage has-pin${members.length === 1 ? " solo-pin" : ""}`} aria-live="polite">
-        <div className="meeting-primary">{renderTile(pinnedMember, true)}</div>
-        <div className="meeting-filmstrip" aria-label="Other room members">
-          {members.filter((member) => member.clientId !== pinnedMember.clientId).map((member) => renderTile(member))}
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className={`meeting-stage meeting-grid count-${members.length}`} aria-live="polite">
+    <div
+      className={`meeting-stage meeting-grid count-${members.length}${pinnedMember ? ` has-pin${members.length === 1 ? " solo-pin" : ""}` : ""}`}
+      aria-live="polite"
+    >
       {members.map((member) => renderTile(member))}
     </div>
   );
