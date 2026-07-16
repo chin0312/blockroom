@@ -13,7 +13,7 @@ export default function AboutPage() {
         <p>
           BlockRoom is an interactive prototype for co-learning and
           body-doubling. It shows real collaborators while they are connected
-          and records only the sessions a wallet explicitly chooses to save.
+          and records eligible sessions only after explicit wallet approval.
         </p>
       </header>
       <AboutExplorer />
@@ -26,7 +26,7 @@ export default function AboutPage() {
           </div>
           <p>
             Move from wallet identity to a room, keep collaborating while you
-            work across tabs, then choose whether to save an eligible session.
+            work across tabs, then confirm an eligible self-attested record.
           </p>
         </header>
         <HowStepper />

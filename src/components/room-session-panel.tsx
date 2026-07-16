@@ -19,6 +19,7 @@ import {
   WarningCircle,
 } from "@phosphor-icons/react";
 import { useAccount } from "wagmi";
+import type { Address } from "viem";
 import { useRoomMedia } from "@/hooks/use-room-media";
 import { useRoomOccupancy } from "@/hooks/use-room-occupancy";
 import { useRoomRealtime } from "@/hooks/use-room-realtime";
@@ -27,6 +28,9 @@ import type { Room } from "@/lib/rooms";
 import { ActiveMembers } from "./ActiveMembers";
 import { RoomVisual } from "./room-visual";
 import { REQUIRED_SESSION_SECONDS, useSession } from "./session-provider";
+import type { OnchainSessionDraft } from "@/lib/session-store";
+import { transactionExplorerUrl } from "@/contracts/blockroom";
+import { useSessionSubmission } from "@/hooks/use-blockroom-contract";
 import { WalletControl } from "./wallet-control";
 
 function formatTimer(totalSeconds: number) {
@@ -42,11 +46,9 @@ export function RoomSessionPanel({ room }: { room: Room }) {
     hydrated,
     getActiveSession,
     startSession,
-    pauseSession,
-    resumeSession,
     tickSession,
-    cancelSession,
-    completeSession,
+    finalizeSession,
+    finalizeWalletSession,
   } = useSession();
   const realtime = useRoomRealtime(room.slug, address, room.capacity);
   const occupancy = useRoomOccupancy([room.slug]);
@@ -56,11 +58,14 @@ export function RoomSessionPanel({ room }: { room: Room }) {
   const [leaveDestination, setLeaveDestination] = useState("/rooms");
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [fullscreenAvailable, setFullscreenAvailable] = useState(false);
+  const [frozenSession, setFrozenSession] = useState<OnchainSessionDraft | null>(null);
   const workspaceRef = useRef<HTMLElement>(null);
   const joinTimerStartedRef = useRef(false);
+  const joinedWalletRef = useRef<Address | null>(null);
+  const submission = useSessionSubmission();
   const session = getActiveSession(address);
   const isCurrentRoom = session?.roomSlug === room.slug;
-  const elapsed = isCurrentRoom ? session.elapsedSeconds : 0;
+  const elapsed = isCurrentRoom ? session.durationSeconds : 0;
   const eligible = elapsed >= REQUIRED_SESSION_SECONDS;
   const remaining = Math.max(0, REQUIRED_SESSION_SECONDS - elapsed);
   const progress = Math.min(100, (elapsed / REQUIRED_SESSION_SECONDS) * 100);
@@ -83,18 +88,18 @@ export function RoomSessionPanel({ room }: { room: Room }) {
     }
     if (!address || joinTimerStartedRef.current) return;
     joinTimerStartedRef.current = true;
+    joinedWalletRef.current = address;
     if (!isCurrentRoom) startSession(room.slug, address);
-    else resumeSession(address);
     void realtime.updateMember({ status: "focusing" });
-  }, [address, isCurrentRoom, realtime, resumeSession, room.slug, startSession]);
+  }, [address, isCurrentRoom, realtime, room.slug, startSession]);
 
   useEffect(() => {
-    if (!address || !realtime.joined || !isCurrentRoom || session.paused) return;
+    if (!address || !realtime.joined || !isCurrentRoom || !session) return;
     const interval = window.setInterval(() => {
-      tickSession(room.slug, address);
+      tickSession(session.sessionId);
     }, 1000);
     return () => window.clearInterval(interval);
-  }, [address, isCurrentRoom, realtime.joined, room.slug, session?.paused, tickSession]);
+  }, [address, isCurrentRoom, realtime.joined, session, tickSession]);
 
   useEffect(() => {
     let cancelled = false;
@@ -117,29 +122,55 @@ export function RoomSessionPanel({ room }: { room: Room }) {
   }
 
   const requestLeave = useCallback((destination = "/rooms") => {
-    if (address && isCurrentRoom) pauseSession(address);
-    void realtime.updateMember({ status: "paused" });
     setLeaveDestination(destination);
     setLeavePromptOpen(true);
-  }, [address, isCurrentRoom, pauseSession, realtime]);
+  }, []);
 
   const cancelLeave = useCallback(() => {
-    if (address && isCurrentRoom) resumeSession(address);
-    void realtime.updateMember({ status: "focusing" });
     setLeavePromptOpen(false);
-  }, [address, isCurrentRoom, realtime, resumeSession]);
+  }, []);
 
-  async function finishLeave(save: boolean) {
-    if (address) {
-      if (save) completeSession(address);
-      else cancelSession(address);
-    }
+  async function disconnectFromRoom() {
     media.stopAllMedia();
     setLeavePromptOpen(false);
     await realtime.leave();
     if (document.fullscreenElement) await document.exitFullscreen();
-    router.push(leaveDestination);
   }
+
+  async function finishLeave(recordNow: boolean) {
+    const finalized = session ? finalizeSession(session.sessionId) : null;
+    await disconnectFromRoom();
+    joinedWalletRef.current = null;
+    if (!finalized) {
+      router.push(leaveDestination);
+      return;
+    }
+    if (!recordNow) {
+      router.push(leaveDestination);
+      return;
+    }
+    setFrozenSession(finalized);
+    const confirmed = await submission.submit(finalized);
+    if (confirmed) window.setTimeout(() => router.push(leaveDestination), 650);
+  }
+
+  async function retryFrozenSession() {
+    if (!frozenSession) return;
+    const confirmed = await submission.submit(frozenSession);
+    if (confirmed) window.setTimeout(() => router.push(leaveDestination), 650);
+  }
+
+  useEffect(() => {
+    const joinedWallet = joinedWalletRef.current;
+    if (!realtime.joined || !joinedWallet) return;
+    if (address?.toLowerCase() === joinedWallet.toLowerCase()) return;
+    const finalized = finalizeWalletSession(joinedWallet);
+    if (finalized) setFrozenSession(finalized);
+    media.stopAllMedia();
+    void realtime.leave();
+    setLeavePromptOpen(false);
+    joinedWalletRef.current = null;
+  }, [address, finalizeWalletSession, media, realtime]);
 
   async function toggleFullscreen() {
     if (!workspaceRef.current || !fullscreenAvailable) return;
@@ -182,32 +213,69 @@ export function RoomSessionPanel({ room }: { room: Room }) {
     return <div className="workspace-skeleton" aria-label="Loading room state" />;
   }
 
-  if (!realtime.joined) {
-    return (
-      <section className="join-space-panel">
-        <div className="join-space-visual" aria-hidden="true">
-          <RoomVisual room={room} />
+  const transactionDialog = frozenSession ? (
+    <div className="leave-dialog-backdrop" role="presentation">
+      <section className="leave-dialog" role="dialog" aria-modal="true" aria-labelledby="transaction-dialog-title">
+        <div className={submission.status === "confirmed" ? "leave-dialog-icon eligible" : "leave-dialog-icon"} aria-hidden="true">
+          {submission.status === "confirmed" ? <CheckCircle size={30} /> : <ClockCountdown size={30} />}
         </div>
-        <div className="join-space-copy">
-          <span className="product-kicker">Realtime space</span>
-          <h2>{isConnected ? "Ready to publish your presence" : "Connect before you join"}</h2>
-          <p>
-            Only wallets that press Join Room appear here. Closing the page or
-            leaving removes your presence. This room supports up to {room.capacity} members.
-          </p>
-          {realtime.mode === "local-tabs" && (
-            <div className="transport-notice"><WarningCircle size={19} /> Same-browser tab mode. Add Supabase keys for different-browser testing.</div>
+        <h2 id="transaction-dialog-title">
+          {submission.status === "confirmed" ? "Recorded on-chain" : submission.status === "submitting" ? "Submitting session" : "Wallet approval required"}
+        </h2>
+        <p>
+          {submission.status === "confirmed"
+            ? `${formatTimer(frozenSession.durationSeconds)} is confirmed on Monad Testnet.`
+            : submission.status === "submitting"
+              ? "The wallet approved this record. BlockRoom is waiting for a successful transaction receipt."
+              : submission.error ?? `${formatTimer(frozenSession.durationSeconds)} is safely pending. Approve a transaction to record the final duration on-chain.`}
+        </p>
+        {submission.hash && transactionExplorerUrl(submission.hash) && (
+          <a className="transaction-link" href={transactionExplorerUrl(submission.hash)} target="_blank" rel="noreferrer">View transaction</a>
+        )}
+        <div className="leave-dialog-actions">
+          {submission.status === "idle" && (
+            <button type="button" className="save" disabled={!submission.configured} onClick={() => void retryFrozenSession()}><CheckCircle size={18} /> Record with session wallet</button>
           )}
-          {realtime.error && <div className="inline-error" role="alert">{realtime.error}</div>}
-          {isConnected ? (
-            <button className="product-button primary" type="button" onClick={handleJoin} disabled={realtime.status === "connecting" || roomFull}>
-              <UsersThree size={19} /> {roomFull ? "Room full" : realtime.status === "connecting" ? "Joining room" : `Join Room (${liveCount}/${room.capacity})`}
-            </button>
-          ) : (
-            <WalletControl placement="hero" />
+          {(submission.status === "failed" || submission.status === "rejected") && (
+            <button type="button" className="save" onClick={() => void retryFrozenSession()}><CheckCircle size={18} /> Retry wallet confirmation</button>
+          )}
+          {submission.status !== "submitting" && submission.status !== "awaiting-wallet" && (
+            <button type="button" className="cancel" onClick={() => router.push(leaveDestination)}>Continue — record later</button>
           )}
         </div>
       </section>
+    </div>
+  ) : null;
+
+  if (!realtime.joined) {
+    return (
+      <>
+        <section className="join-space-panel">
+          <div className="join-space-visual" aria-hidden="true">
+            <RoomVisual room={room} />
+          </div>
+          <div className="join-space-copy">
+            <span className="product-kicker">Realtime space</span>
+            <h2>{isConnected ? "Ready to publish your presence" : "Connect before you join"}</h2>
+            <p>
+              Only wallets that press Join Room appear here. Closing the page or
+              leaving removes your presence. This room supports up to {room.capacity} members.
+            </p>
+            {realtime.mode === "local-tabs" && (
+              <div className="transport-notice"><WarningCircle size={19} /> Same-browser tab mode. Add Supabase keys for different-browser testing.</div>
+            )}
+            {realtime.error && <div className="inline-error" role="alert">{realtime.error}</div>}
+            {isConnected ? (
+              <button className="product-button primary" type="button" onClick={handleJoin} disabled={realtime.status === "connecting" || roomFull}>
+                <UsersThree size={19} /> {roomFull ? "Room full" : realtime.status === "connecting" ? "Joining room" : `Join Room (${liveCount}/${room.capacity})`}
+              </button>
+            ) : (
+              <WalletControl placement="hero" />
+            )}
+          </div>
+        </section>
+        {transactionDialog}
+      </>
     );
   }
 
@@ -225,7 +293,7 @@ export function RoomSessionPanel({ room }: { room: Room }) {
           </div>
           <div className="workspace-session-chip" aria-label={`${formatTimer(elapsed)} elapsed in this room`}>
             <ClockCountdown size={17} />
-            <div><strong>{formatTimer(elapsed)}</strong><span>{eligible ? "Ready to save" : `${formatTimer(remaining)} to qualify`}</span></div>
+            <div><strong>{formatTimer(elapsed)}</strong><span>{eligible ? "Eligible for on-chain record" : `${formatTimer(remaining)} to qualify`}</span></div>
           </div>
           <button
             type="button"
@@ -293,15 +361,15 @@ export function RoomSessionPanel({ room }: { room: Room }) {
             <div className={eligible ? "leave-dialog-icon eligible" : "leave-dialog-icon"} aria-hidden="true">
               {eligible ? <CheckCircle size={30} /> : <ClockCountdown size={30} />}
             </div>
-            <h2 id="leave-dialog-title">{eligible ? "Save this focus session?" : "Leave without a record?"}</h2>
+            <h2 id="leave-dialog-title">{eligible ? "Record this focus session?" : "Leave without a record?"}</h2>
             <p>
               {eligible
-                ? `You accumulated ${formatTimer(elapsed)} while joined. Save this exact duration to your wallet activity before leaving.`
+                ? `You accumulated ${formatTimer(elapsed)} while joined. Leaving freezes the exact duration. A wallet transaction is required to record it on Monad Testnet.`
                 : `You accumulated ${formatTimer(elapsed)}. Sessions need at least 30:00 of joined room time before they can be recorded.`}
             </p>
             <div className="leave-dialog-actions">
-              {eligible && <button type="button" className="save" onClick={() => void finishLeave(true)}><CheckCircle size={18} /> Save and leave</button>}
-              <button type="button" className="discard" onClick={() => void finishLeave(false)}><SignOut size={18} /> Leave without saving</button>
+              {eligible && <button type="button" className="save" onClick={() => void finishLeave(true)}><CheckCircle size={18} /> Record on-chain and leave</button>}
+              <button type="button" className="discard" onClick={() => void finishLeave(false)}><SignOut size={18} /> {eligible ? "Leave — record later" : "Leave room"}</button>
               <button type="button" className="cancel" onClick={cancelLeave}>Stay in room</button>
             </div>
           </section>

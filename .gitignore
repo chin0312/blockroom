@@ -12,6 +12,9 @@
 
 # testing
 /coverage
+/artifacts/
+/cache/
+/ignition/deployments/
 
 # next.js
 /.next/

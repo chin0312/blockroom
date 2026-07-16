@@ -8,12 +8,13 @@ import {
   ClockCounterClockwise,
 } from "@phosphor-icons/react";
 import { getRoom } from "@/lib/rooms";
-import type { SessionRecord } from "./session-provider";
-
-const DAY_SECONDS = 24 * 60 * 60;
+import {
+  splitSessionAcrossLocalDays,
+  type ConfirmedSessionRecord,
+} from "@/lib/session-store";
 
 type ContributionGraphProps = {
-  records: SessionRecord[];
+  records: ConfirmedSessionRecord[];
 };
 
 type MonthCursor = {
@@ -54,15 +55,16 @@ export function ContributionGraph({ records }: ContributionGraphProps) {
   const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
 
   const recordsByDay = useMemo(() => {
-    const grouped = new Map<string, SessionRecord[]>();
+    const grouped = new Map<string, Array<{ record: ConfirmedSessionRecord; creditedSeconds: number }>>();
     records.forEach((record) => {
-      const key = localDateKey(record.completedAt);
-      grouped.set(key, [...(grouped.get(key) ?? []), record]);
+      splitSessionAcrossLocalDays(record.startedAt, record.endedAt).forEach((creditedSeconds, key) => {
+        grouped.set(key, [...(grouped.get(key) ?? []), { record, creditedSeconds }]);
+      });
     });
     grouped.forEach((dayRecords) => {
       dayRecords.sort(
         (a, b) =>
-          new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime(),
+          b.record.endedAt - a.record.endedAt,
       );
     });
     return grouped;
@@ -87,7 +89,7 @@ export function ContributionGraph({ records }: ContributionGraphProps) {
     ? recordsByDay.get(selectedDateKey) ?? []
     : [];
   const selectedTotalSeconds = selectedRecords.reduce(
-    (total, record) => total + record.durationSeconds,
+    (total, entry) => total + entry.creditedSeconds,
     0,
   );
   const selectedDate = selectedDateKey
@@ -160,13 +162,15 @@ export function ContributionGraph({ records }: ContributionGraphProps) {
           const date = new Date(visibleMonth.year, visibleMonth.month, day);
           const dateKey = localDateKey(date);
           const dayRecords = recordsByDay.get(dateKey) ?? [];
-          const totalSeconds = dayRecords.reduce(
-            (total, record) => total + record.durationSeconds,
-            0,
-          );
-          const ratio = Math.min(1, totalSeconds / DAY_SECONDS);
-          const fillAlpha = totalSeconds > 0 ? 0.18 + ratio * 0.78 : 0.015;
-          const borderAlpha = totalSeconds > 0 ? 0.22 + ratio * 0.58 : 0.12;
+          const totalSeconds = dayRecords.reduce((total, entry) => total + entry.creditedSeconds, 0);
+          const intensity = totalSeconds === 0 ? 0
+            : totalSeconds < 1_800 ? 1
+              : totalSeconds < 3_600 ? 2
+                : totalSeconds < 7_200 ? 3
+                  : totalSeconds < 14_400 ? 4
+                    : 5;
+          const fillAlpha = [0.015, 0.16, 0.3, 0.46, 0.64, 0.88][intensity];
+          const borderAlpha = [0.12, 0.22, 0.3, 0.42, 0.56, 0.72][intensity];
           const isSelected = selectedDateKey === dateKey;
           const ariaDuration = totalSeconds > 0 ? formatDuration(totalSeconds) : "no recorded time";
 
@@ -177,13 +181,13 @@ export function ContributionGraph({ records }: ContributionGraphProps) {
               role="gridcell"
               key={day}
               aria-selected={isSelected}
-              aria-label={`${date.toLocaleDateString()}: ${ariaDuration}, ${dayRecords.length} saved ${dayRecords.length === 1 ? "session" : "sessions"}`}
+              aria-label={`${date.toLocaleDateString()}: ${ariaDuration}, ${dayRecords.length} confirmed ${dayRecords.length === 1 ? "session" : "sessions"}`}
               title={`${date.toLocaleDateString()}: ${ariaDuration}`}
               onClick={() => setSelectedDateKey(dateKey)}
               style={{
                 backgroundColor: `rgba(58, 175, 159, ${fillAlpha})`,
                 borderColor: `rgba(31, 132, 121, ${borderAlpha})`,
-                color: ratio >= 0.58 ? "white" : undefined,
+                color: intensity >= 5 ? "white" : undefined,
               }}
             >
               <span>{day}</span>
@@ -193,10 +197,10 @@ export function ContributionGraph({ records }: ContributionGraphProps) {
         })}
       </div>
 
-      <div className="contribution-scale" aria-label="Color scale from zero to 24 recorded hours">
-        <span>0h</span>
+      <div className="contribution-scale" aria-label="Confirmed duration scale from zero to more than four hours">
+        <span>0</span>
         <i />
-        <span>24h</span>
+        <span>30m</span><span>1h</span><span>2h</span><span>4h+</span>
       </div>
 
       <div className="calendar-day-detail" aria-live="polite">
@@ -205,7 +209,7 @@ export function ContributionGraph({ records }: ContributionGraphProps) {
             <ClockCounterClockwise size={24} weight="light" />
             <div>
               <strong>Select a day</strong>
-              <p>Open any calendar cell to inspect its real saved sessions.</p>
+              <p>Open any calendar cell to inspect its confirmed on-chain sessions.</p>
             </div>
           </div>
         ) : (
@@ -223,26 +227,26 @@ export function ContributionGraph({ records }: ContributionGraphProps) {
                 <strong>{formatDuration(selectedTotalSeconds)}</strong>
               </div>
               <p>
-                {selectedRecords.length} saved {selectedRecords.length === 1 ? "session" : "sessions"}
+                {selectedRecords.length} confirmed {selectedRecords.length === 1 ? "session" : "sessions"}
               </p>
             </div>
             {selectedRecords.length === 0 ? (
-              <p className="calendar-no-records">No completed sessions were saved on this day.</p>
+              <p className="calendar-no-records">No confirmed sessions were recorded on this day.</p>
             ) : (
               <div className="calendar-record-list">
-                {selectedRecords.map((record) => (
-                  <article key={record.id}>
+                {selectedRecords.map(({ record, creditedSeconds }) => (
+                  <article key={record.sessionId}>
                     <span className="calendar-record-signal" aria-hidden="true" />
                     <div>
                       <strong>{getRoom(record.roomSlug)?.name ?? "Room session"}</strong>
                       <p>
-                        Saved {new Intl.DateTimeFormat(undefined, {
+                        Confirmed {new Intl.DateTimeFormat(undefined, {
                           hour: "numeric",
                           minute: "2-digit",
-                        }).format(new Date(record.completedAt))}
+                        }).format(new Date(record.endedAt * 1000))}
                       </p>
                     </div>
-                    <strong>{formatDuration(record.durationSeconds)}</strong>
+                    <strong>{formatDuration(creditedSeconds)}</strong>
                   </article>
                 ))}
               </div>

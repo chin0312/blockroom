@@ -10,8 +10,8 @@
 BlockRoom is a Web3 co-learning and co-working MVP intended for real human
 testing. A connected EVM wallet is the visible identity. People in different
 browsers can explicitly join the same room, see genuine presence and media
-state, communicate in real time, focus together, and optionally save an
-eligible session to browser-local wallet activity.
+state, communicate in real time, focus together, and submit eligible
+self-attested sessions to the BlockRoom contract on Monad Testnet.
 
 The product is not a course marketplace, social network, wallet portfolio,
 crypto exchange, or on-chain proof system. Rooms are neutral focus contexts,
@@ -21,10 +21,10 @@ not promises of hosted lessons or pre-existing communities.
 
 1. Prove that a wallet can act as a login-free identity.
 2. Prove that real joined clients can share ephemeral presence, chat, and media.
-3. Record the exact duration of an eligible joined-room session under that
-   wallet in the current browser.
-4. Request a real wallet message signature for a clearly labelled local demo
-   badge without claiming an NFT mint or blockchain transaction.
+3. Record the exact final duration of an eligible joined-room session after a
+   successful wallet-approved Monad Testnet transaction.
+4. Claim one of two non-transferable ERC-1155 achievements when confirmed
+   contract totals satisfy its requirement.
 
 ### Honesty invariants
 
@@ -33,10 +33,11 @@ not promises of hosted lessons or pre-existing communities.
 - Empty states must remain visibly designed and explicit.
 - A wallet is visible only after connection; a member is visible only after
   explicitly joining a room.
-- Browser-local records must always be described as local activity.
+- Pending and legacy browser-local records must always be labelled local and
+  must never affect confirmed on-chain totals.
 - Same-origin fallback must be described as `Same-browser tab mode`.
-- A signed demo badge is not an NFT, costs no gas, sends no transaction, and is
-  not blockchain proof.
+- An on-chain record is a wallet-signed self-attestation, not blockchain proof
+  of presence, focus or productivity.
 - Room occupancy always comes from actual current presence state.
 
 ## 2. Application Map
@@ -60,7 +61,7 @@ not promises of hosted lessons or pre-existing communities.
 | `/about` | Combined product explanation | Wallet identity, focus room, and session proof explorer followed by the five-step trust flow |
 | `/rooms` | Live room directory | Type filters, twelve destination cards, actual occupancy out of six, room entry links |
 | `/rooms/[slug]` | Real-time collaboration space | Room purpose, connect/join gate, member meeting stage, discussions, timer, media controls, fullscreen, and leave/save decision |
-| `/dashboard` | Wallet-scoped local record | Wallet identity, focus statistics, monthly contribution calendar, daily detail, session history, and signed demo badges |
+| `/dashboard` | Wallet-scoped on-chain record | Confirmed totals, monthly contribution calendar, pending retries, legacy disclosure, session history, and soulbound badges |
 
 ## 3. Page Content and States
 
@@ -76,7 +77,8 @@ Primary proposition:
 - Secondary action: wallet connection or connected identity.
 
 The preview is explanatory UI, not live state. It shows a neutral `00:00`,
-`Join to load presence`, `Real members only`, and `Local record after 30:00`.
+`Join to load real presence`, empty Active members and Discussions states, and
+an explicit same-browser fallback label when Supabase is unavailable.
 The three index destinations are What is BlockRoom, Explore Rooms, and Open
 Dashboard.
 
@@ -88,16 +90,16 @@ The product-model explorer has three interactive tabs:
    connection, and network context is explicit.
 2. **Focus rooms**: Supabase Presence, live status controls, and no fake
    participants.
-3. **Session proof**: joined-room time, work across browser tabs, multiple daily
-   sessions, and clearly local records.
+3. **Session proof**: joined-room time, pending wallet confirmation, confirmed
+   contract records, and the self-attested trust limitation.
 
 The How it works stepper contains five interactive steps:
 
 1. Connect identity through Reown AppKit.
 2. Choose a room and explicitly publish presence.
 3. Accumulate joined-room time automatically.
-4. Save an eligible wallet-scoped local activity record on leave.
-5. Sign an eligible local demo badge claim.
+4. Approve an eligible wallet-scoped Session transaction on leave or retry it later.
+5. Claim an eligible soulbound ERC-1155 Badge.
 
 ### Rooms
 
@@ -145,45 +147,42 @@ Spatial controls invoke real browser APIs:
 - `Webcam / Stop Camera`: acquires or stops the local camera video track.
 - `Share Screen / Stop sharing`: uses `getDisplayMedia`, publishes sharing state,
   and restores the camera track when sharing stops.
-- `Leave Space`: pauses qualification time and opens the save/discard decision.
+- `Leave Space`: freezes the final interval and opens record-now/record-later choices.
 
 ### Leave decision and recording
 
 - Joining successfully starts the qualifying session automatically.
 - Time advances while the wallet remains joined, including while the user works
   in another browser tab.
-- Explicit leave or intercepted internal navigation pauses the active interval.
-- Under 30 minutes: the user can leave without a record or stay.
-- At or above 30 minutes: the user can save the exact elapsed duration, leave
-  without saving, or stay.
-- Saving writes one wallet-scoped `SessionRecord` to localStorage.
-- Multiple eligible records may be saved on the same day.
-- Closing/reloading the page triggers browser exit protection and pauses stored
-  active sessions; it does not silently create a completed record.
+- Explicit leave, refresh, close or account change freezes the continuous visit.
+- Under 30 minutes: the local draft is removed and contributes nothing.
+- At or above 30 minutes: the frozen record remains pending until wallet
+  confirmation and a successful transaction receipt.
+- Rejection, RPC failure or closing the page never discards an eligible record;
+  Dashboard offers retry.
+- Rejoining always creates a new Session ID and independent 30-minute threshold.
+- The contract and frontend reject duplicate submission of the same Session ID.
 
 ### Dashboard
 
-The Dashboard derives every value from the currently connected wallet's local
-records. Without a connected wallet it shows an honest connection state, not
-example data.
+The Dashboard derives confirmed values from the BlockRoom contract. Pending and
+legacy local records are shown separately and never influence confirmed data.
 
 - **Wallet identity**: abbreviated address and current chain.
-- **Total Focus Time**: sum of `durationSeconds` across that wallet's records.
+- **Total Focus Time**: sum of confirmed contract `durationSeconds`.
 - **Current Streak**: consecutive local calendar days ending today, or ending
   yesterday when there is no record today.
-- **Total Badges Earned**: count of saved signed local badge receipts.
-- **Contribution calendar**: browsable monthly calendar. Each day's color is a
-  continuous ratio of accumulated time to 24 hours, capped at 24 hours.
-- **Day detail**: selecting a cell reveals exact accumulated duration, number of
-  saved sessions, room names, saved times, and individual durations.
+- **Total Badges Earned**: count of ERC-1155 Badge balances held by the wallet.
+- **Contribution calendar**: confirmed intervals split across local midnight;
+  intensity tiers are 0, <30m, 30–59m, 1–2h, 2–4h and >4h.
+- **Day detail**: selecting a cell reveals exact confirmed duration, number of
+  on-chain sessions, room names, confirmation times, and attributed durations.
 - **Completed sessions**: latest eight records in reverse completion order.
-- **Signed demo badges**: Level 1 unlocks after one saved completion; Level 2
-  unlocks after five.
+- **Soulbound badges**: First Session unlocks after one confirmed completion;
+  24 Hour Focus unlocks after 86,400 confirmed seconds.
 
-Badge claiming requests a real `personal_sign`-style message through wagmi. The
-signed message includes wallet, badge name and level, network context, timestamp,
-and an explicit no-mint/no-transaction/no-gas disclaimer. A successful signature
-creates a local receipt; a rejected or failed signature creates no badge.
+Badge claiming is a real contract transaction through wagmi. A Badge appears as
+claimed only after a successful receipt; rejection or revert creates no NFT.
 
 ## 4. Room Catalogue
 
@@ -215,7 +214,8 @@ All rooms have a six-member frontend MVP capacity.
 - Users can open the network picker from the connected network chip.
 - Email, socials, swaps, onramp, send, receive, wallet history, and analytics are
   disabled.
-- BlockRoom never loads wallet balances, tokens, NFTs, or payment actions.
+- BlockRoom never loads general wallet balances, tokens, unrelated NFTs, or
+  payment actions; it reads only its own two Badge balances.
 
 ### Platform identity settings
 
@@ -241,8 +241,10 @@ Next.js client
   |     microphone plus one outbound camera-or-screen video track
   |-- BroadcastChannel + localStorage fallback
   |     same-origin tab presence, chat, signaling, occupancy
-  `-- localStorage activity store
-        active sessions, completed records, avatar choice, signed receipts
+  |-- BlockRoom contract on Monad Testnet
+  |     confirmed sessions, cumulative totals, soulbound ERC-1155 badges
+  `-- localStorage recovery store
+        active visits, pending transactions, legacy records, avatar choice
 ```
 
 ### Supabase mode
@@ -348,32 +350,20 @@ type RtcSignal = {
 ### Activity types
 
 ```ts
-type ActiveSession = {
-  walletAddress: string;
+type OnchainSessionDraft = {
+  sessionId: Hex;
+  walletAddress: Address;
   roomSlug: string;
-  startedAt: string;
-  lastCountedAt: string;
-  elapsedSeconds: number;
-  paused: boolean;
-};
-
-type SessionRecord = {
-  id: string;
-  walletAddress: string;
-  roomSlug: string;
-  startedAt: string;
-  completedAt: string;
+  roomId: Hex;
+  chainId: 10143;
+  startedAt: number;
+  endedAt?: number;
   durationSeconds: number;
-  source: "local";
-};
-
-type BadgeClaim = {
-  id: string;
-  walletAddress: string;
-  level: 1 | 2;
-  claimedAt: string;
-  signature: string;
-  source: "signed-local-demo";
+  lastObservedAt: number;
+  ownerId: string;
+  status: "in-progress" | "eligible" | "awaiting-confirmation" |
+    "submitting" | "confirmed" | "rejected" | "failed";
+  txHash?: Hex;
 };
 ```
 
@@ -381,7 +371,8 @@ type BadgeClaim = {
 
 | Key | Contents | Lifetime and scope |
 |---|---|---|
-| `blockroom-activity-v2` | Active sessions, completed session records, signed badge receipts | Persistent in the current browser; filtered by wallet address |
+| `blockroom:onchain-session-v1:<sessionId>` | One active, pending or reconciled Session | Persistent recovery state; independent keys prevent cross-tab overwrites |
+| `blockroom-activity-v2` | Previous local sessions and signed demo receipts | Read-only Legacy data; never affects confirmed totals or Badge eligibility |
 | `blockroom:profile:<lowercase-address>` | Selected platform avatar variant | Persistent per wallet in the current browser |
 | `blockroom:presence:<roomSlug>` | Same-browser fallback member snapshot | Ephemeral fallback transport with stale cleanup |
 
@@ -399,12 +390,13 @@ server-side profile, persistent chat table, or app-owned user database exists.
 | Chat | Real ephemeral state | Supabase Broadcast or BroadcastChannel |
 | Microphone, camera, screen | Real browser media | MediaDevices APIs and MediaStream tracks |
 | Peer audio/video | Real live browser media | WebRTC mesh |
-| Joined-room elapsed time | Real browser-measured state | Active session timestamps while joined |
-| Completed sessions | Browser-local persistent state | `blockroom-activity-v2` |
-| Dashboard totals and calendar | Derived local state | Current wallet's completed records |
-| Demo badges | Signed browser-local receipt | Real signature plus local claim record |
+| Joined-room elapsed time | Real browser-measured state | Continuous Join-to-end client timestamps |
+| Pending eligible sessions | Browser-local recovery state | Per-Session localStorage records |
+| Completed sessions | Real on-chain state | BlockRoom contract receipt and stored Session |
+| Dashboard totals and calendar | Derived on-chain state | Current wallet's confirmed contract records |
+| Achievement badges | Real on-chain state | Soulbound ERC-1155 balances and eligibility |
 | Same-browser tab mode | Honest fallback | BroadcastChannel and localStorage |
-| NFT minting or on-chain check-in | Not implemented | Must not be implied |
+| Proof of focus/productivity | Not implemented | Contract records are explicitly self-attested |
 | Persistent chat/history/profile backend | Not implemented | Must not be implied |
 | Atomic room admission and TURN | Not implemented | Requires trusted infrastructure |
 
@@ -417,6 +409,12 @@ server-side profile, persistent chat table, or app-owned user database exists.
 | `NEXT_PUBLIC_SUPABASE_URL` | Enables different-browser Supabase Realtime rooms |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Preferred public Supabase client key |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Compatibility fallback for older Supabase projects |
+| `NEXT_PUBLIC_BLOCKROOM_CONTRACT_ADDRESS` | Enables confirmed Session reads/writes and Badge claims on Monad Testnet |
+| `NEXT_PUBLIC_BLOCKROOM_DEPLOYMENT_TX` | Optional public deployment transaction reference |
+
+`MONAD_DEPLOYER_PRIVATE_KEY` and verifier credentials are deployment-only
+secrets. They are never `NEXT_PUBLIC_`, never needed by Vercel, and never
+committed.
 
 No service-role key, private wallet key, signing key, or secret belongs in the
 client environment or Git history.
@@ -467,10 +465,10 @@ client environment or Git history.
 | `room-directory.tsx` | Room filters, live occupancy and destination cards |
 | `room-session-panel.tsx` | Join gate, workspace, timer, chat, controls, fullscreen and leave flow |
 | `ActiveMembers.tsx` | Real member grid, media players, pin stage and member state |
-| `dashboard-client.tsx` | Wallet-local statistics, history, calendar and badges composition |
-| `ContributionGraph.tsx` | Monthly navigation, 24-hour color scale and selected-day detail |
-| `BadgeSection.tsx` | Eligibility, wallet signature, receipt storage states and error handling |
-| `session-provider.tsx` | Wallet-scoped activity persistence and active-session lifecycle |
+| `dashboard-client.tsx` | Confirmed contract statistics, pending retry, legacy disclosure and history composition |
+| `ContributionGraph.tsx` | Local-day interval splitting, duration tiers and selected-day detail |
+| `BadgeSection.tsx` | Contract eligibility, ERC-1155 claim states and explorer links |
+| `session-provider.tsx` | Per-Session recovery persistence and active/pending lifecycle |
 
 ### Visual primitives
 
@@ -492,6 +490,11 @@ client environment or Git history.
 | `realtime-types.ts` | Member, chat, lobby and RTC signal contracts |
 | `profile.ts` | Wallet-scoped avatar variants and update events |
 | `appkit.ts` | Reown project configuration, supported EVM networks and wagmi adapter |
+| `use-blockroom-contract.ts` | Contract reads, chain switching, writes, receipts and reconciliation |
+| `session-store.ts` | Pure Session ID, timing, finalization and local-day splitting rules |
+| `contracts/BlockRoom.sol` | Confirmed Session ledger and two soulbound ERC-1155 achievements |
+| `hardhat.config.ts` | Solidity profiles, Monad Testnet network and verifier configuration |
+| `test/BlockRoom.ts` | Session validation, duplicate prevention, totals, Badge eligibility and soulbound tests |
 
 ## 12. Refactor Guardrails
 
@@ -504,10 +507,10 @@ the functional specification:
 - Reown wallet-only identity and supported networks.
 - Supabase/fallback realtime behavior and truthful transport labels.
 - WebRTC media, pinning, screen-share promotion and fullscreen behavior.
-- Automatic joined-room timing and the 30-minute leave/save gate.
-- Activity, contribution, streak and badge derivation rules.
-- Public data types and existing localStorage keys.
+- Automatic joined-room timing and the 30-minute on-chain eligibility gate.
+- Confirmed-only contribution, streak and Badge derivation rules.
+- Public data types, pending recovery keys and read-only legacy storage.
 - Empty states and all no-fabrication rules.
 
 Concept imagery may reorganize these capabilities visually, but it may not add
-invented users, metrics, messages, balances, transfers, NFTs, or transactions.
+invented users, metrics, messages, balances, Badge ownership, or transactions.

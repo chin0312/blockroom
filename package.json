@@ -2,13 +2,20 @@
   "name": "blockroom",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "vitest run",
+    "contracts:compile": "hardhat build",
+    "contracts:test": "hardhat test nodejs",
+    "contracts:deploy": "hardhat ignition deploy ignition/modules/BlockRoom.ts --network monadTestnet",
+    "contracts:verify": "hardhat verify --network monadTestnet"
   },
   "dependencies": {
+    "@openzeppelin/contracts": "^5.6.1",
     "@phosphor-icons/react": "^2.1.10",
     "@reown/appkit": "^1.8.22",
     "@reown/appkit-adapter-wagmi": "^1.8.22",
@@ -22,13 +29,17 @@
     "wagmi": "^2.19.5"
   },
   "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox-viem": "^5.0.7",
+    "@nomicfoundation/hardhat-verify": "^3.0.21",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
+    "hardhat": "^3.9.1",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.10"
   }
 }

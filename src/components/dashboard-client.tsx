@@ -1,12 +1,19 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
   Clock,
+  CloudArrowUp,
+  WarningCircle,
 } from "@phosphor-icons/react";
 import { useAccount } from "wagmi";
+import type { Hex } from "viem";
+import { blockRoomAddress, transactionExplorerUrl } from "@/contracts/blockroom";
 import { getRoom } from "@/lib/rooms";
+import { splitSessionAcrossLocalDays, type ConfirmedSessionRecord } from "@/lib/session-store";
+import { useConfirmedSessions, useBadgeContractState, useSessionSubmission } from "@/hooks/use-blockroom-contract";
 import { BadgeSection } from "./BadgeSection";
 import { ContributionGraph } from "./ContributionGraph";
 import { AmbientModule } from "./ambient-module";
@@ -18,83 +25,125 @@ function formatFocus(seconds: number) {
   return hours ? `${hours}h ${minutes}m` : `${minutes} min`;
 }
 
-function localDateKey(value: string | Date) {
-  const date = typeof value === "string" ? new Date(value) : value;
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
-
-function currentStreak(completedAt: string[]) {
-  if (!completedAt.length) return 0;
-  const days = new Set(completedAt.map(localDateKey));
+function currentStreak(records: ConfirmedSessionRecord[]) {
+  if (!records.length) return 0;
+  const days = new Set<string>();
+  records.forEach((record) => {
+    splitSessionAcrossLocalDays(record.startedAt, record.endedAt).forEach((_, key) => days.add(key));
+  });
+  const keyFor = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
   const cursor = new Date();
-  if (!days.has(localDateKey(cursor))) cursor.setDate(cursor.getDate() - 1);
+  if (!days.has(keyFor(cursor))) cursor.setDate(cursor.getDate() - 1);
   let streak = 0;
-  while (days.has(localDateKey(cursor))) {
+  while (days.has(keyFor(cursor))) {
     streak += 1;
     cursor.setDate(cursor.getDate() - 1);
   }
   return streak;
 }
 
-function formatDate(value: string) {
+function formatDate(unixSeconds: number) {
   return new Intl.DateTimeFormat(undefined, {
     dateStyle: "medium",
     timeStyle: "short",
-  }).format(new Date(value));
+  }).format(new Date(unixSeconds * 1000));
 }
 
 export function DashboardClient() {
   const { address, chain, isConnected } = useAccount();
-  const {
-    hydrated,
-    getRecords,
-    getBadgeClaims,
-    saveBadgeClaim,
-  } = useSession();
-  const records = getRecords(address);
-  const claims = getBadgeClaims(address);
+  const { hydrated, getPendingSessions, getLegacyRecords } = useSession();
+  const confirmedQuery = useConfirmedSessions(address);
+  const badgeQuery = useBadgeContractState(address);
+  const submission = useSessionSubmission();
+  const [retryingId, setRetryingId] = useState<Hex | null>(null);
+  const records = confirmedQuery.data ?? [];
+  const pendingSessions = getPendingSessions(address);
+  const legacyRecords = getLegacyRecords(address);
   const totalSeconds = records.reduce((sum, record) => sum + record.durationSeconds, 0);
-  const streak = currentStreak(records.map((record) => record.completedAt));
+  const streak = currentStreak(records);
+  const totalBadges = Number(Boolean(badgeQuery.data?.firstClaimed)) + Number(Boolean(badgeQuery.data?.focusClaimed));
 
-  if (!hydrated) return <div className="dashboard-loading" aria-label="Loading local wallet activity" />;
+  async function retrySession(sessionId: Hex) {
+    const session = pendingSessions.find((item) => item.sessionId === sessionId);
+    if (!session) return;
+    setRetryingId(sessionId);
+    await submission.submit(session);
+    setRetryingId(null);
+  }
+
+  if (!hydrated) return <div className="dashboard-loading" aria-label="Loading wallet activity" />;
+
+  const disconnectedLabel = !isConnected ? "Connect wallet" : !blockRoomAddress ? "Not configured" : confirmedQuery.isLoading ? "Loading" : undefined;
 
   return (
     <div className="dashboard-product-grid">
       <section className="dashboard-identity-panel">
         <div className="identity-protocol" aria-hidden="true"><AmbientModule variant="identity" size="card" /></div>
-        <div><span>Wallet identity</span><h2>{isConnected && address ? `${address.slice(0, 6)}...${address.slice(-4)}` : "Not connected"}</h2><p>{isConnected ? chain?.name ?? "Network unavailable" : "Connect a wallet to load its local activity."}</p></div>
+        <div><span>Wallet identity</span><h2>{isConnected && address ? `${address.slice(0, 6)}...${address.slice(-4)}` : "Not connected"}</h2><p>{isConnected ? chain?.name ?? "Network unavailable" : "Connect a wallet to load its on-chain activity."}</p></div>
       </section>
 
       <div className="dashboard-stats">
-        <article><AmbientModule variant="time" size="nano" /><span>Total Focus Time</span><strong>{isConnected ? formatFocus(totalSeconds) : "Connect wallet"}</strong></article>
-        <article><AmbientModule variant="proof" size="nano" /><span>Current Streak</span><strong>{isConnected ? `${streak} ${streak === 1 ? "day" : "days"}` : "Connect wallet"}</strong></article>
-        <article><AmbientModule variant="signature" size="nano" /><span>Total Badges Earned</span><strong>{isConnected ? claims.length : "Connect wallet"}</strong></article>
+        <article><AmbientModule variant="time" size="nano" /><span>Total Focus Time</span><strong>{disconnectedLabel ?? formatFocus(totalSeconds)}</strong></article>
+        <article><AmbientModule variant="proof" size="nano" /><span>Current Streak</span><strong>{disconnectedLabel ?? `${streak} ${streak === 1 ? "day" : "days"}`}</strong></article>
+        <article><AmbientModule variant="signature" size="nano" /><span>Total Badges Earned</span><strong>{disconnectedLabel ?? totalBadges}</strong></article>
       </div>
+
+      {!blockRoomAddress && (
+        <div className="onchain-disclosure" role="status"><WarningCircle size={19} /> Contract not configured. Rooms remain usable, but no data is presented as on-chain.</div>
+      )}
+      {confirmedQuery.error && (
+        <div className="onchain-disclosure error" role="alert"><WarningCircle size={19} /> Confirmed records could not be loaded. Pending local records remain safe.</div>
+      )}
 
       <ContributionGraph records={records} />
 
+      <section className="pending-session-panel">
+        <div className="dashboard-section-heading"><div><span>Awaiting confirmation</span><h2>Pending eligible sessions</h2></div><strong>{pendingSessions.length}</strong></div>
+        <p className="badge-disclosure">Pending and failed sessions never affect confirmed totals, the contribution calendar, or NFT eligibility.</p>
+        {pendingSessions.length ? (
+          <div className="pending-session-list">
+            {pendingSessions.map((session) => {
+              const explorer = transactionExplorerUrl(session.txHash);
+              const busy = retryingId === session.sessionId && (submission.status === "awaiting-wallet" || submission.status === "submitting");
+              return (
+                <article key={session.sessionId}>
+                  <div><strong>{getRoom(session.roomSlug)?.name ?? session.roomSlug}</strong><p>{formatFocus(session.durationSeconds)} · {session.status.replaceAll("-", " ")}</p></div>
+                  <div className="pending-session-actions">
+                    {explorer && <a href={explorer} target="_blank" rel="noreferrer">Explorer</a>}
+                    <button type="button" disabled={busy || !submission.configured} onClick={() => void retrySession(session.sessionId)}>
+                      <CloudArrowUp size={16} /> {busy ? "Confirming" : session.status === "submitting" ? "Resume receipt" : "Retry"}
+                    </button>
+                  </div>
+                  {session.error && <p className="pending-error">{session.error}</p>}
+                </article>
+              );
+            })}
+          </div>
+        ) : <div className="pending-empty">No eligible sessions are waiting for wallet confirmation.</div>}
+      </section>
+
       <section className="activity-panel">
-        <div className="dashboard-section-heading"><div><span>Local activity</span><h2>Completed sessions</h2></div><strong>{records.length}</strong></div>
+        <div className="dashboard-section-heading"><div><span>Confirmed on-chain</span><h2>Completed sessions</h2></div><strong>{records.length}</strong></div>
         {records.length ? (
           <div className="activity-list">
             {records.slice(0, 8).map((record) => {
               const room = getRoom(record.roomSlug);
-              return <article key={record.id}><span className="activity-signal" /><div><h3>{room?.name ?? "Room"}</h3><p>{formatDate(record.completedAt)}</p></div><strong>{formatFocus(record.durationSeconds)}</strong></article>;
+              return <article key={record.sessionId}><span className="activity-signal" /><div><h3>{room?.name ?? "Room"}</h3><p>{formatDate(record.endedAt)}</p></div><strong>{formatFocus(record.durationSeconds)}</strong></article>;
             })}
           </div>
         ) : (
-          <div className="activity-empty"><Clock size={30} /><h3>No completed sessions</h3><p>A record appears only after 30 minutes of real joined-room time.</p><Link href="/rooms">Browse rooms <ArrowRight size={17} /></Link></div>
+          <div className="activity-empty"><Clock size={30} /><h3>No confirmed sessions</h3><p>An eligible session appears here only after its Monad Testnet transaction succeeds.</p><Link href="/rooms">Browse rooms <ArrowRight size={17} /></Link></div>
         )}
       </section>
 
-      <BadgeSection
-        address={address}
-        chainId={chain?.id}
-        networkName={chain?.name}
-        completionCount={records.length}
-        claims={claims}
-        onClaim={saveBadgeClaim}
-      />
+      <BadgeSection address={address} completionCount={records.length} totalDurationSeconds={totalSeconds} />
+
+      {legacyRecords.length > 0 && (
+        <section className="legacy-panel">
+          <div className="dashboard-section-heading"><div><span>Browser-local legacy</span><h2>Previous local records</h2></div><strong>{legacyRecords.length}</strong></div>
+          <p>These records remain available for transparency, but they do not affect on-chain totals, calendar intensity, or NFT eligibility.</p>
+        </section>
+      )}
     </div>
   );
 }

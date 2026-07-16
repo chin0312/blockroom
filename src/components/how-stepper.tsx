@@ -30,17 +30,17 @@ const steps = [
   },
   {
     title: "Create wallet activity",
-    short: "Local proof",
+    short: "On-chain record",
     icon: "check" as IconName,
-    description: "When you leave after 30 minutes, choose whether to save the exact duration as a wallet-scoped browser record.",
-    signal: "Wallet + timestamp + duration + room",
+    description: "When an eligible session ends, its exact duration stays pending until the wallet approves a Monad Testnet transaction.",
+    signal: "Confirmed transaction + session ID",
   },
   {
-    title: "Sign a demo badge",
-    short: "Signature",
+    title: "Claim an achievement",
+    short: "Soulbound NFT",
     icon: "shield" as IconName,
-    description: "Eligible badges request a real wallet message signature. The signed receipt stays local and is not an NFT.",
-    signal: "Wallet signature + local receipt",
+    description: "Confirmed on-chain totals unlock two non-transferable ERC-1155 badges. Minting always requires explicit wallet approval.",
+    signal: "Contract eligibility + NFT ownership",
   },
 ];
 

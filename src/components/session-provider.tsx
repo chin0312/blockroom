@@ -6,23 +6,29 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
+import type { Address, Hex } from "viem";
+import { BLOCKROOM_MIN_SESSION_SECONDS } from "@/contracts/blockroom";
+import {
+  advanceSession,
+  createSessionDraft,
+  finalizeSessionDraft,
+  isActiveSession,
+  type OnchainSessionDraft,
+  type OnchainSessionStatus,
+} from "@/lib/session-store";
 
-const STORAGE_KEY = "blockroom-activity-v2";
-export const REQUIRED_SESSION_SECONDS = 30 * 60;
+const LEGACY_STORAGE_KEY = "blockroom-activity-v2";
+const SESSION_STORAGE_PREFIX = "blockroom:onchain-session-v1:";
+const SESSION_UPDATED_EVENT = "blockroom:onchain-session-updated";
+const STALE_ACTIVE_SECONDS = 15;
 
-export type ActiveSession = {
-  walletAddress: string;
-  roomSlug: string;
-  startedAt: string;
-  lastCountedAt: string;
-  elapsedSeconds: number;
-  paused: boolean;
-};
+export const REQUIRED_SESSION_SECONDS = BLOCKROOM_MIN_SESSION_SECONDS;
 
-export type SessionRecord = {
+export type LegacySessionRecord = {
   id: string;
   walletAddress: string;
   roomSlug: string;
@@ -32,7 +38,7 @@ export type SessionRecord = {
   source: "local";
 };
 
-export type BadgeClaim = {
+export type LegacyBadgeClaim = {
   id: string;
   walletAddress: string;
   level: 1 | 2;
@@ -41,312 +47,280 @@ export type BadgeClaim = {
   source: "signed-local-demo";
 };
 
-type ActivityState = {
-  activeSessions: Record<string, ActiveSession>;
-  records: SessionRecord[];
-  badgeClaims: BadgeClaim[];
-};
-
-type SessionContextValue = ActivityState & {
+type SessionContextValue = {
   hydrated: boolean;
-  getActiveSession: (walletAddress?: string) => ActiveSession | null;
-  getRecords: (walletAddress?: string) => SessionRecord[];
-  getBadgeClaims: (walletAddress?: string) => BadgeClaim[];
-  startSession: (roomSlug: string, walletAddress: string) => void;
-  pauseSession: (walletAddress: string) => void;
-  resumeSession: (walletAddress: string) => void;
-  tickSession: (roomSlug: string, walletAddress: string) => void;
-  cancelSession: (walletAddress: string) => void;
-  completeSession: (walletAddress: string) => SessionRecord | null;
-  saveBadgeClaim: (claim: BadgeClaim) => void;
+  sessions: OnchainSessionDraft[];
+  legacyRecords: LegacySessionRecord[];
+  legacyBadgeClaims: LegacyBadgeClaim[];
+  getActiveSession: (walletAddress?: string) => OnchainSessionDraft | null;
+  getPendingSessions: (walletAddress?: string) => OnchainSessionDraft[];
+  getLegacyRecords: (walletAddress?: string) => LegacySessionRecord[];
+  startSession: (roomSlug: string, walletAddress: Address) => OnchainSessionDraft;
+  tickSession: (sessionId: Hex) => void;
+  finalizeSession: (sessionId: Hex) => OnchainSessionDraft | null;
+  finalizeWalletSession: (walletAddress: string) => OnchainSessionDraft | null;
+  markSession: (
+    sessionId: Hex,
+    updates: Partial<Pick<OnchainSessionDraft, "status" | "txHash" | "error" | "confirmedAt">>,
+  ) => OnchainSessionDraft | null;
 };
 
-const EMPTY_STATE: ActivityState = {
-  activeSessions: {},
-  records: [],
-  badgeClaims: [],
+type LegacyActivityState = {
+  records?: LegacySessionRecord[];
+  badgeClaims?: LegacyBadgeClaim[];
 };
 
 const SessionContext = createContext<SessionContextValue | null>(null);
+
+function sessionKey(sessionId: Hex) {
+  return `${SESSION_STORAGE_PREFIX}${sessionId}`;
+}
+
+function parseSession(raw: string | null): OnchainSessionDraft | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as OnchainSessionDraft;
+    return parsed.sessionId && parsed.walletAddress && parsed.roomSlug ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function readSessions(): OnchainSessionDraft[] {
+  const sessions: OnchainSessionDraft[] = [];
+  for (let index = 0; index < window.localStorage.length; index += 1) {
+    const key = window.localStorage.key(index);
+    if (!key?.startsWith(SESSION_STORAGE_PREFIX)) continue;
+    const session = parseSession(window.localStorage.getItem(key));
+    if (session) sessions.push(session);
+  }
+  return sessions.sort((a, b) => b.startedAt - a.startedAt);
+}
+
+function readLegacyState(): Required<LegacyActivityState> {
+  try {
+    const parsed = JSON.parse(
+      window.localStorage.getItem(LEGACY_STORAGE_KEY) ?? "{}",
+    ) as LegacyActivityState;
+    return {
+      records: Array.isArray(parsed.records) ? parsed.records : [],
+      badgeClaims: Array.isArray(parsed.badgeClaims) ? parsed.badgeClaims : [],
+    };
+  } catch {
+    return { records: [], badgeClaims: [] };
+  }
+}
 
 function normalizeAddress(address: string) {
   return address.toLowerCase();
 }
 
-function pauseAllSessions(state: ActivityState, now = new Date()): ActivityState {
-  const activeSessions = Object.fromEntries(
-    Object.entries(state.activeSessions).map(([address, session]) => {
-      if (session.paused) return [address, session];
-      const additionalSeconds = Math.max(
-        0,
-        Math.floor(
-          (now.getTime() - new Date(session.lastCountedAt).getTime()) / 1000,
-        ),
-      );
-      return [
-        address,
-        {
-          ...session,
-          elapsedSeconds: session.elapsedSeconds + additionalSeconds,
-          lastCountedAt: now.toISOString(),
-          paused: true,
-        },
-      ];
-    }),
-  );
-  return { ...state, activeSessions };
-}
-
-function readState(raw: string | null): ActivityState {
-  if (!raw) return EMPTY_STATE;
-  try {
-    const parsed = JSON.parse(raw) as Partial<ActivityState>;
-    const activeSessions =
-      parsed.activeSessions && typeof parsed.activeSessions === "object"
-        ? Object.fromEntries(
-            Object.entries(parsed.activeSessions).map(([address, session]) => [
-              address,
-              {
-                ...session,
-                lastCountedAt:
-                  typeof session.lastCountedAt === "string"
-                    ? session.lastCountedAt
-                    : new Date().toISOString(),
-              },
-            ]),
-          )
-        : {};
-    return {
-      activeSessions,
-      records: Array.isArray(parsed.records)
-        ? parsed.records.filter((record) => Boolean(record?.walletAddress))
-        : [],
-      badgeClaims: Array.isArray(parsed.badgeClaims)
-        ? parsed.badgeClaims.filter((claim) => Boolean(claim?.walletAddress))
-        : [],
-    };
-  } catch {
-    return EMPTY_STATE;
-  }
-}
-
 export function SessionProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<ActivityState>(EMPTY_STATE);
+  const [sessions, setSessions] = useState<OnchainSessionDraft[]>([]);
+  const [legacyRecords, setLegacyRecords] = useState<LegacySessionRecord[]>([]);
+  const [legacyBadgeClaims, setLegacyBadgeClaims] = useState<LegacyBadgeClaim[]>([]);
   const [hydrated, setHydrated] = useState(false);
+  const runtimeIdRef = useRef(crypto.randomUUID());
+  const sessionsRef = useRef<OnchainSessionDraft[]>([]);
+
+  const replaceInState = useCallback((session: OnchainSessionDraft | null, id: Hex) => {
+    setSessions((current) => {
+      const next = session
+        ? [session, ...current.filter((item) => item.sessionId !== id)]
+        : current.filter((item) => item.sessionId !== id);
+      next.sort((a, b) => b.startedAt - a.startedAt);
+      sessionsRef.current = next;
+      return next;
+    });
+  }, []);
+
+  const persistSession = useCallback((session: OnchainSessionDraft) => {
+    window.localStorage.setItem(sessionKey(session.sessionId), JSON.stringify(session));
+    replaceInState(session, session.sessionId);
+    window.dispatchEvent(new CustomEvent(SESSION_UPDATED_EVENT));
+  }, [replaceInState]);
+
+  const removeSession = useCallback((sessionId: Hex) => {
+    window.localStorage.removeItem(sessionKey(sessionId));
+    replaceInState(null, sessionId);
+    window.dispatchEvent(new CustomEvent(SESSION_UPDATED_EVENT));
+  }, [replaceInState]);
 
   useEffect(() => {
     let cancelled = false;
     queueMicrotask(() => {
       if (cancelled) return;
-      setState(readState(window.localStorage.getItem(STORAGE_KEY)));
+      const nowSeconds = Math.floor(Date.now() / 1000);
+      const recovered = readSessions().flatMap((session) => {
+        if (
+          isActiveSession(session) &&
+          nowSeconds - session.lastObservedAt > STALE_ACTIVE_SECONDS
+        ) {
+          const finalized = finalizeSessionDraft(session, session.lastObservedAt);
+          if (finalized) {
+            window.localStorage.setItem(sessionKey(finalized.sessionId), JSON.stringify(finalized));
+            return [finalized];
+          }
+          window.localStorage.removeItem(sessionKey(session.sessionId));
+          return [];
+        }
+        return [session];
+      });
+      const legacy = readLegacyState();
+      sessionsRef.current = recovered;
+      setSessions(recovered);
+      setLegacyRecords(legacy.records);
+      setLegacyBadgeClaims(legacy.badgeClaims);
       setHydrated(true);
     });
 
-    function handleStorage(event: StorageEvent) {
-      if (event.key === STORAGE_KEY) setState(readState(event.newValue));
-    }
-
+    const refresh = () => {
+      const next = readSessions();
+      sessionsRef.current = next;
+      setSessions(next);
+    };
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key?.startsWith(SESSION_STORAGE_PREFIX)) refresh();
+      if (event.key === LEGACY_STORAGE_KEY) {
+        const nextLegacy = readLegacyState();
+        setLegacyRecords(nextLegacy.records);
+        setLegacyBadgeClaims(nextLegacy.badgeClaims);
+      }
+    };
     window.addEventListener("storage", handleStorage);
+    window.addEventListener(SESSION_UPDATED_EVENT, refresh);
     return () => {
       cancelled = true;
       window.removeEventListener("storage", handleStorage);
+      window.removeEventListener(SESSION_UPDATED_EVENT, refresh);
     };
   }, []);
 
   useEffect(() => {
     if (!hydrated) return;
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  }, [hydrated, state]);
-
-  useEffect(() => {
-    if (!hydrated) return;
     const handlePageHide = () => {
-      const pausedState = pauseAllSessions(state);
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(pausedState));
-      setState(pausedState);
+      const nowSeconds = Math.floor(Date.now() / 1000);
+      sessionsRef.current
+        .filter(
+          (session) =>
+            session.ownerId === runtimeIdRef.current && isActiveSession(session),
+        )
+        .forEach((session) => {
+          const finalized = finalizeSessionDraft(session, nowSeconds);
+          if (finalized) {
+            window.localStorage.setItem(sessionKey(finalized.sessionId), JSON.stringify(finalized));
+          } else {
+            window.localStorage.removeItem(sessionKey(session.sessionId));
+          }
+        });
     };
     window.addEventListener("pagehide", handlePageHide);
     return () => window.removeEventListener("pagehide", handlePageHide);
-  }, [hydrated, state]);
+  }, [hydrated]);
 
   const getActiveSession = useCallback(
-    (walletAddress?: string) =>
-      walletAddress
-        ? state.activeSessions[normalizeAddress(walletAddress)] ?? null
-        : null,
-    [state.activeSessions],
+    (walletAddress?: string) => {
+      if (!walletAddress) return null;
+      const normalized = normalizeAddress(walletAddress);
+      return sessions.find(
+        (session) =>
+          normalizeAddress(session.walletAddress) === normalized &&
+          session.ownerId === runtimeIdRef.current &&
+          isActiveSession(session),
+      ) ?? null;
+    },
+    [sessions],
   );
 
-  const getRecords = useCallback(
+  const getPendingSessions = useCallback(
     (walletAddress?: string) => {
       if (!walletAddress) return [];
       const normalized = normalizeAddress(walletAddress);
-      return state.records.filter(
+      return sessions.filter(
+        (session) =>
+          normalizeAddress(session.walletAddress) === normalized &&
+          !isActiveSession(session) &&
+          session.status !== "confirmed",
+      );
+    },
+    [sessions],
+  );
+
+  const getLegacyRecords = useCallback(
+    (walletAddress?: string) => {
+      if (!walletAddress) return [];
+      const normalized = normalizeAddress(walletAddress);
+      return legacyRecords.filter(
         (record) => normalizeAddress(record.walletAddress) === normalized,
       );
     },
-    [state.records],
+    [legacyRecords],
   );
 
-  const getBadgeClaims = useCallback(
-    (walletAddress?: string) => {
-      if (!walletAddress) return [];
-      const normalized = normalizeAddress(walletAddress);
-      return state.badgeClaims.filter(
-        (claim) => normalizeAddress(claim.walletAddress) === normalized,
-      );
+  const updateStoredSession = useCallback((
+    sessionId: Hex,
+    transform: (current: OnchainSessionDraft) => OnchainSessionDraft | null,
+  ) => {
+    const current = parseSession(window.localStorage.getItem(sessionKey(sessionId)));
+    if (!current) return null;
+    const next = transform(current);
+    if (next) persistSession(next);
+    else removeSession(sessionId);
+    return next;
+  }, [persistSession, removeSession]);
+
+  const value = useMemo<SessionContextValue>(() => ({
+    hydrated,
+    sessions,
+    legacyRecords,
+    legacyBadgeClaims,
+    getActiveSession,
+    getPendingSessions,
+    getLegacyRecords,
+    startSession(roomSlug, walletAddress) {
+      const session = createSessionDraft({
+        walletAddress,
+        roomSlug,
+        ownerId: runtimeIdRef.current,
+      });
+      persistSession(session);
+      return session;
     },
-    [state.badgeClaims],
-  );
-
-  const value = useMemo<SessionContextValue>(
-    () => ({
-      ...state,
-      hydrated,
-      getActiveSession,
-      getRecords,
-      getBadgeClaims,
-      startSession(roomSlug, walletAddress) {
-        const normalized = normalizeAddress(walletAddress);
-        const now = new Date().toISOString();
-        setState((current) => ({
-          ...current,
-          activeSessions: {
-            ...current.activeSessions,
-            [normalized]: {
-              walletAddress: normalized,
-              roomSlug,
-              startedAt: now,
-              lastCountedAt: now,
-              elapsedSeconds: 0,
-              paused: false,
-            },
-          },
-        }));
-      },
-      pauseSession(walletAddress) {
-        const normalized = normalizeAddress(walletAddress);
-        setState((current) => {
-          const session = current.activeSessions[normalized];
-          if (!session || session.paused) return current;
-          const now = new Date();
-          const additionalSeconds = Math.max(
-            0,
-            Math.floor(
-              (now.getTime() - new Date(session.lastCountedAt).getTime()) / 1000,
-            ),
-          );
-          return {
-            ...current,
-            activeSessions: {
-              ...current.activeSessions,
-              [normalized]: {
-                ...session,
-                elapsedSeconds: session.elapsedSeconds + additionalSeconds,
-                lastCountedAt: now.toISOString(),
-                paused: true,
-              },
-            },
-          };
-        });
-      },
-      resumeSession(walletAddress) {
-        const normalized = normalizeAddress(walletAddress);
-        setState((current) => {
-          const session = current.activeSessions[normalized];
-          if (!session || !session.paused) return current;
-          return {
-            ...current,
-            activeSessions: {
-              ...current.activeSessions,
-              [normalized]: {
-                ...session,
-                lastCountedAt: new Date().toISOString(),
-                paused: false,
-              },
-            },
-          };
-        });
-      },
-      tickSession(roomSlug, walletAddress) {
-        const normalized = normalizeAddress(walletAddress);
-        setState((current) => {
-          const session = current.activeSessions[normalized];
-          if (!session || session.roomSlug !== roomSlug || session.paused) {
-            return current;
-          }
-          const now = new Date();
-          const additionalSeconds = Math.max(
-            0,
-            Math.floor(
-              (now.getTime() - new Date(session.lastCountedAt).getTime()) / 1000,
-            ),
-          );
-          if (additionalSeconds === 0) return current;
-          return {
-            ...current,
-            activeSessions: {
-              ...current.activeSessions,
-              [normalized]: {
-                ...session,
-                elapsedSeconds: session.elapsedSeconds + additionalSeconds,
-                lastCountedAt: now.toISOString(),
-              },
-            },
-          };
-        });
-      },
-      cancelSession(walletAddress) {
-        const normalized = normalizeAddress(walletAddress);
-        setState((current) => {
-          const activeSessions = { ...current.activeSessions };
-          delete activeSessions[normalized];
-          return { ...current, activeSessions };
-        });
-      },
-      completeSession(walletAddress) {
-        const normalized = normalizeAddress(walletAddress);
-        const session = state.activeSessions[normalized];
-        if (!session || session.elapsedSeconds < REQUIRED_SESSION_SECONDS) {
-          return null;
-        }
-
-        const record: SessionRecord = {
-          id: crypto.randomUUID(),
-          walletAddress: normalized,
-          roomSlug: session.roomSlug,
-          startedAt: session.startedAt,
-          completedAt: new Date().toISOString(),
-          durationSeconds: session.elapsedSeconds,
-          source: "local",
-        };
-        setState((current) => {
-          const activeSessions = { ...current.activeSessions };
-          delete activeSessions[normalized];
-          return {
-            ...current,
-            activeSessions,
-            records: [record, ...current.records],
-          };
-        });
-        return record;
-      },
-      saveBadgeClaim(claim) {
-        setState((current) => {
-          const duplicate = current.badgeClaims.some(
-            (item) =>
-              normalizeAddress(item.walletAddress) ===
-                normalizeAddress(claim.walletAddress) &&
-              item.level === claim.level,
-          );
-          return duplicate
-            ? current
-            : { ...current, badgeClaims: [claim, ...current.badgeClaims] };
-        });
-      },
-    }),
-    [getActiveSession, getBadgeClaims, getRecords, hydrated, state],
-  );
+    tickSession(sessionId) {
+      updateStoredSession(sessionId, (current) => advanceSession(current));
+    },
+    finalizeSession(sessionId) {
+      return updateStoredSession(sessionId, (current) => finalizeSessionDraft(current));
+    },
+    finalizeWalletSession(walletAddress) {
+      const normalized = normalizeAddress(walletAddress);
+      const active = sessionsRef.current.find(
+        (session) =>
+          normalizeAddress(session.walletAddress) === normalized &&
+          session.ownerId === runtimeIdRef.current &&
+          isActiveSession(session),
+      );
+      return active
+        ? updateStoredSession(active.sessionId, (current) => finalizeSessionDraft(current))
+        : null;
+    },
+    markSession(sessionId, updates) {
+      return updateStoredSession(sessionId, (current) => ({
+        ...current,
+        ...updates,
+      }));
+    },
+  }), [
+    getActiveSession,
+    getLegacyRecords,
+    getPendingSessions,
+    hydrated,
+    legacyBadgeClaims,
+    legacyRecords,
+    persistSession,
+    sessions,
+    updateStoredSession,
+  ]);
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }
@@ -356,3 +330,5 @@ export function useSession() {
   if (!context) throw new Error("useSession must be used inside SessionProvider");
   return context;
 }
+
+export type { OnchainSessionDraft, OnchainSessionStatus };

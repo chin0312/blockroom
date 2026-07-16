@@ -5,105 +5,94 @@ import {
   CheckCircle,
   LockKey,
   SealCheck,
-  Signature,
+  Sparkle,
 } from "@phosphor-icons/react";
-import { useSignMessage } from "wagmi";
-import type { BadgeClaim } from "./session-provider";
+import type { Address } from "viem";
+import {
+  FIRST_SESSION_BADGE_ID,
+  FOCUS_24_HOURS_BADGE_ID,
+  transactionExplorerUrl,
+} from "@/contracts/blockroom";
+import { useBadgeClaim, useBadgeContractState } from "@/hooks/use-blockroom-contract";
 import { AmbientModule } from "./ambient-module";
 
 type BadgeSectionProps = {
-  address?: string;
-  chainId?: number;
-  networkName?: string;
+  address?: Address;
   completionCount: number;
-  claims: BadgeClaim[];
-  onClaim: (claim: BadgeClaim) => void;
+  totalDurationSeconds: number;
 };
 
 const badges = [
-  { level: 1 as const, required: 1, name: "First Proof", description: "Complete one eligible focus session." },
-  { level: 2 as const, required: 5, name: "Focus Protocol", description: "Complete five eligible focus sessions." },
-];
+  {
+    id: FIRST_SESSION_BADGE_ID,
+    level: 1,
+    name: "First Session",
+    description: "Complete one confirmed eligible on-chain session.",
+  },
+  {
+    id: FOCUS_24_HOURS_BADGE_ID,
+    level: 2,
+    name: "24 Hour Focus",
+    description: "Accumulate 86,400 seconds of confirmed on-chain focus time.",
+  },
+] as const;
 
-export function BadgeSection({
-  address,
-  chainId,
-  networkName,
-  completionCount,
-  claims,
-  onClaim,
-}: BadgeSectionProps) {
-  const { signMessageAsync } = useSignMessage();
-  const [pendingLevel, setPendingLevel] = useState<1 | 2 | null>(null);
-  const [error, setError] = useState<string | null>(null);
+export function BadgeSection({ address, completionCount, totalDurationSeconds }: BadgeSectionProps) {
+  const badgeState = useBadgeContractState(address);
+  const claim = useBadgeClaim();
+  const [pendingBadgeId, setPendingBadgeId] = useState<1n | 2n | null>(null);
 
-  async function claimBadge(level: 1 | 2, name: string) {
-    if (!address) return;
-    setPendingLevel(level);
-    setError(null);
-    const claimedAt = new Date().toISOString();
-    const message = [
-      "BlockRoom signed demo badge",
-      `Wallet: ${address.toLowerCase()}`,
-      `Badge: ${name} (Level ${level})`,
-      `Network context: ${networkName ?? "Unknown network"}${chainId ? ` (${chainId})` : ""}`,
-      `Requested at: ${claimedAt}`,
-      "This signature does not mint an NFT, send a transaction, or spend gas.",
-    ].join("\n");
-
-    try {
-      const signature = await signMessageAsync({ message });
-      onClaim({
-        id: crypto.randomUUID(),
-        walletAddress: address.toLowerCase(),
-        level,
-        claimedAt,
-        signature,
-        source: "signed-local-demo",
-      });
-    } catch (signError) {
-      setError(
-        signError instanceof Error && signError.message.toLowerCase().includes("reject")
-          ? "Signature request was rejected. No badge was saved."
-          : "The wallet could not sign this badge claim.",
-      );
-    } finally {
-      setPendingLevel(null);
-    }
+  async function claimBadge(badgeId: 1n | 2n) {
+    setPendingBadgeId(badgeId);
+    await claim.claim(badgeId);
+    setPendingBadgeId(null);
   }
 
   return (
     <section className="badge-section">
       <div className="dashboard-section-heading">
-        <div><span>Achievements</span><h2>Signed demo badges</h2></div>
+        <div><span>Achievements</span><h2>Soulbound badges</h2></div>
         <SealCheck size={29} weight="light" />
       </div>
-      <p className="badge-disclosure">A claim opens a real wallet signature request. The result stays in this browser and is not an NFT.</p>
+      <p className="badge-disclosure">
+        Eligibility and ownership come from the BlockRoom contract. Claiming requires an explicit Monad Testnet transaction.
+      </p>
       <div className="badge-grid">
         {badges.map((badge) => {
-          const claim = claims.find((item) => item.level === badge.level);
-          const eligible = completionCount >= badge.required;
-          const pending = pendingLevel === badge.level;
+          const eligible = badge.id === FIRST_SESSION_BADGE_ID
+            ? Boolean(badgeState.data?.firstEligible)
+            : Boolean(badgeState.data?.focusEligible);
+          const claimed = badge.id === FIRST_SESSION_BADGE_ID
+            ? Boolean(badgeState.data?.firstClaimed)
+            : Boolean(badgeState.data?.focusClaimed);
+          const pending = pendingBadgeId === badge.id && (claim.status === "awaiting-wallet" || claim.status === "submitting");
+          const lockedLabel = badge.id === FIRST_SESSION_BADGE_ID
+            ? `${completionCount}/1 confirmed`
+            : `${Math.min(totalDurationSeconds, 86_400).toLocaleString()}/86,400 sec`;
           return (
-            <article className={claim ? "badge-card signed" : eligible ? "badge-card eligible" : "badge-card locked"} key={badge.level}>
+            <article className={claimed ? "badge-card signed" : eligible ? "badge-card eligible" : "badge-card locked"} key={badge.id.toString()}>
               <div className="badge-emblem" aria-hidden="true">
-                <AmbientModule variant={claim ? "signature" : eligible ? "proof" : "identity"} size="mini" />
+                <AmbientModule variant={claimed ? "signature" : eligible ? "proof" : "identity"} size="mini" />
                 <span>0{badge.level}</span>
               </div>
               <div className="badge-copy"><span>Level {badge.level}</span><h3>{badge.name}</h3><p>{badge.description}</p></div>
-              {claim ? (
-                <div className="badge-signed-state"><CheckCircle size={18} /> Signed demo badge</div>
+              {claimed ? (
+                <div className="badge-signed-state"><CheckCircle size={18} /> Claimed on-chain</div>
               ) : (
-                <button type="button" disabled={!address || !eligible || pending} onClick={() => claimBadge(badge.level, badge.name)}>
-                  {eligible ? <Signature size={18} /> : <LockKey size={17} />}
-                  {pending ? "Awaiting signature" : eligible ? "Sign Badge Claim" : `${completionCount}/${badge.required} sessions`}
+                <button type="button" disabled={!address || !claim.configured || !eligible || pending || badgeState.isLoading} onClick={() => void claimBadge(badge.id)}>
+                  {eligible ? <Sparkle size={18} /> : <LockKey size={17} />}
+                  {pending ? (claim.status === "submitting" ? "Confirming transaction" : "Awaiting wallet") : eligible ? "Claim badge" : lockedLabel}
                 </button>
               )}
             </article>
           );
         })}
       </div>
-      {error && <div className="badge-error" role="alert">{error}</div>}
+      {!claim.configured && <div className="badge-error" role="status">Contract not configured. No NFT claim is available yet.</div>}
+      {claim.error && <div className="badge-error" role="alert">{claim.error}</div>}
+      {claim.hash && transactionExplorerUrl(claim.hash) && (
+        <a className="transaction-link" href={transactionExplorerUrl(claim.hash)} target="_blank" rel="noreferrer">View badge transaction</a>
+      )}
     </section>
   );
 }
