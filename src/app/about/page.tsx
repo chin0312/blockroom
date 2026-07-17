@@ -11,7 +11,7 @@ export default function AboutPage() {
           <h1>A room for focus.<br />A record for effort.</h1>
         </div>
         <p>
-          BlockRoom is an interactive prototype for co-learning and
+          BlockRoom is a public-beta co-learning and
           body-doubling. It shows real collaborators while they are connected
           and records eligible sessions only after explicit wallet approval.
         </p>

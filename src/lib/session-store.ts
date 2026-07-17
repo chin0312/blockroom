@@ -1,10 +1,10 @@
 import type { Address, Hex } from "viem";
 import {
-  BLOCKROOM_CHAIN_ID,
   BLOCKROOM_MIN_SESSION_SECONDS,
   createSessionId,
   roomIdForSlug,
 } from "@/contracts/blockroom";
+import type { SupportedChainId } from "@/config/chains";
 
 export type OnchainSessionStatus =
   | "in-progress"
@@ -20,7 +20,7 @@ export type OnchainSessionDraft = {
   walletAddress: Address;
   roomSlug: string;
   roomId: Hex;
-  chainId: typeof BLOCKROOM_CHAIN_ID;
+  chainId: SupportedChainId;
   startedAt: number;
   endedAt?: number;
   durationSeconds: number;
@@ -46,22 +46,24 @@ export type ConfirmedSessionRecord = {
 export function createSessionDraft({
   walletAddress,
   roomSlug,
+  chainId,
   ownerId,
   nowSeconds = Math.floor(Date.now() / 1000),
   nonce,
 }: {
   walletAddress: Address;
   roomSlug: string;
+  chainId: SupportedChainId;
   ownerId: string;
   nowSeconds?: number;
   nonce?: string;
 }): OnchainSessionDraft {
   return {
-    sessionId: createSessionId({ walletAddress, roomSlug, nonce }),
+    sessionId: createSessionId({ chainId, walletAddress, roomSlug, nonce }),
     walletAddress: walletAddress.toLowerCase() as Address,
     roomSlug,
     roomId: roomIdForSlug(roomSlug),
-    chainId: BLOCKROOM_CHAIN_ID,
+    chainId,
     startedAt: nowSeconds,
     durationSeconds: 0,
     lastObservedAt: nowSeconds,

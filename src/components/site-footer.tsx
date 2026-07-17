@@ -6,7 +6,7 @@ export function SiteFooter() {
     <footer className="site-footer">
       <div className="footer-inner">
         <Brand />
-        <p>An honest, interactive Web3 co-learning prototype.</p>
+        <p>BlockRoom v1 Public Beta — focused time, recorded honestly.</p>
         <div className="footer-links">
           <Link href="/rooms">Rooms</Link>
           <Link href="/dashboard">Dashboard</Link>

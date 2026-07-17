@@ -3,7 +3,7 @@
 > Functional source of truth for BlockRoom's product behavior and truthful state.
 > The active visual direction is defined by
 > `docs/design-references/elevenlabs/DESIGN.md` and the approved product reference.
-> Last audited: 2026-07-16.
+> Last audited: 2026-07-17 for v1 Public Beta.
 
 ## 1. Product Definition
 
@@ -11,18 +11,22 @@ BlockRoom is a Web3 co-learning and co-working MVP intended for real human
 testing. A connected EVM wallet is the visible identity. People in different
 browsers can explicitly join the same room, see genuine presence and media
 state, communicate in real time, focus together, and submit eligible
-self-attested sessions to the BlockRoom contract on Monad Testnet.
+self-attested sessions to the selected chain's BlockRoom contracts.
+
+Public Beta officially supports Monad Testnet (primary), Base Sepolia and
+Ethereum Sepolia. Session history and achievements are chain-specific; the
+product does not aggregate activity across networks yet.
 
 The product is not a course marketplace, social network, wallet portfolio,
 crypto exchange, or on-chain proof system. Rooms are neutral focus contexts,
 not promises of hosted lessons or pre-existing communities.
 
-### Demo goals
+### Public Beta goals
 
 1. Prove that a wallet can act as a login-free identity.
 2. Prove that real joined clients can share ephemeral presence, chat, and media.
 3. Record the exact final duration of an eligible joined-room session after a
-   successful wallet-approved Monad Testnet transaction.
+   successful wallet-approved transaction on a supported testnet.
 4. Claim one of two non-transferable ERC-1155 achievements when confirmed
    contract totals satisfy its requirement.
 
@@ -124,6 +128,10 @@ remains viewable, but a new client cannot join.
 - Full room: disables admission and labels the state `Room full`.
 - Local fallback: displays the exact same-browser testing notice.
 - Realtime connection errors remain visible and do not fabricate fallback data.
+- A wallet on an unsupported chain must switch to one of the three Public Beta
+  networks before joining.
+- An undeployed supported chain remains available for realtime collaboration
+  but labels Session recording and Badge claiming as unavailable.
 
 ### Joined room workspace
 
@@ -154,7 +162,8 @@ Spatial controls invoke real browser APIs:
 - Joining successfully starts the qualifying session automatically.
 - Time advances while the wallet remains joined, including while the user works
   in another browser tab.
-- Explicit leave, refresh, close or account change freezes the continuous visit.
+- Explicit leave, refresh, close, account change or network change freezes the
+  continuous visit.
 - Under 30 minutes: the local draft is removed and contributes nothing.
 - At or above 30 minutes: the frozen record remains pending until wallet
   confirmation and a successful transaction receipt.
@@ -165,8 +174,9 @@ Spatial controls invoke real browser APIs:
 
 ### Dashboard
 
-The Dashboard derives confirmed values from the BlockRoom contract. Pending and
-legacy local records are shown separately and never influence confirmed data.
+The Dashboard derives confirmed values from the connected chain's Session and
+Badge contracts. Pending and legacy local records are shown separately and
+never influence confirmed data. Cross-chain aggregation is not implemented.
 
 - **Wallet identity**: abbreviated address and current chain.
 - **Total Focus Time**: sum of confirmed contract `durationSeconds`.
@@ -210,7 +220,7 @@ All rooms have a six-member frontend MVP capacity.
 - Reown AppKit is initialized only when `NEXT_PUBLIC_REOWN_PROJECT_ID` exists.
 - Wallet-only EIP-155 connection is enabled.
 - Native wallet selection and WalletConnect QR sessions remain available.
-- Supported chains: Monad Testnet, Ethereum, Base, Arbitrum, Optimism, Polygon.
+- Supported chains: Monad Testnet, Base Sepolia, Ethereum Sepolia.
 - Users can open the network picker from the connected network chip.
 - Email, socials, swaps, onramp, send, receive, wallet history, and analytics are
   disabled.
@@ -241,8 +251,8 @@ Next.js client
   |     microphone plus one outbound camera-or-screen video track
   |-- BroadcastChannel + localStorage fallback
   |     same-origin tab presence, chat, signaling, occupancy
-  |-- BlockRoom contract on Monad Testnet
-  |     confirmed sessions, cumulative totals, soulbound ERC-1155 badges
+  |-- Chain registry + two BlockRoom contracts per supported testnet
+  |     chain-scoped sessions, cumulative totals, soulbound ERC-1155 badges
   `-- localStorage recovery store
         active visits, pending transactions, legacy records, avatar choice
 ```
@@ -355,7 +365,7 @@ type OnchainSessionDraft = {
   walletAddress: Address;
   roomSlug: string;
   roomId: Hex;
-  chainId: 10143;
+  chainId: SupportedChainId;
   startedAt: number;
   endedAt?: number;
   durationSeconds: number;
@@ -392,9 +402,10 @@ server-side profile, persistent chat table, or app-owned user database exists.
 | Peer audio/video | Real live browser media | WebRTC mesh |
 | Joined-room elapsed time | Real browser-measured state | Continuous Join-to-end client timestamps |
 | Pending eligible sessions | Browser-local recovery state | Per-Session localStorage records |
-| Completed sessions | Real on-chain state | BlockRoom contract receipt and stored Session |
-| Dashboard totals and calendar | Derived on-chain state | Current wallet's confirmed contract records |
-| Achievement badges | Real on-chain state | Soulbound ERC-1155 balances and eligibility |
+| Completed sessions | Real on-chain state | Connected chain's Session contract receipt and record |
+| Dashboard totals and calendar | Derived on-chain state | Current wallet and connected chain's confirmed Session records |
+| Achievement badges | Real on-chain state | Connected chain's Badge balance and Session-backed eligibility |
+| Cross-chain history | Not implemented | Public Beta intentionally keeps each chain independent |
 | Same-browser tab mode | Honest fallback | BroadcastChannel and localStorage |
 | Proof of focus/productivity | Not implemented | Contract records are explicitly self-attested |
 | Persistent chat/history/profile backend | Not implemented | Must not be implied |
@@ -409,12 +420,13 @@ server-side profile, persistent chat table, or app-owned user database exists.
 | `NEXT_PUBLIC_SUPABASE_URL` | Enables different-browser Supabase Realtime rooms |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Preferred public Supabase client key |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Compatibility fallback for older Supabase projects |
-| `NEXT_PUBLIC_BLOCKROOM_CONTRACT_ADDRESS` | Enables confirmed Session reads/writes and Badge claims on Monad Testnet |
-| `NEXT_PUBLIC_BLOCKROOM_DEPLOYMENT_TX` | Optional public deployment transaction reference |
+| `NEXT_PUBLIC_<NETWORK>_RPC_URL` | Optional public RPC override for each supported testnet |
+| `NEXT_PUBLIC_<NETWORK>_SESSION_CONTRACT` | Real deployed Session contract for one supported testnet |
+| `NEXT_PUBLIC_<NETWORK>_BADGE_CONTRACT` | Real deployed Badge contract for one supported testnet |
 
-`MONAD_DEPLOYER_PRIVATE_KEY` and verifier credentials are deployment-only
+`BLOCKROOM_DEPLOYER_PRIVATE_KEY` and `ETHERSCAN_API_KEY` are deployment-only
 secrets. They are never `NEXT_PUBLIC_`, never needed by Vercel, and never
-committed.
+committed. Exact environment variable names are listed in `.env.example`.
 
 No service-role key, private wallet key, signing key, or secret belongs in the
 client environment or Git history.
@@ -490,17 +502,19 @@ client environment or Git history.
 | `realtime-types.ts` | Member, chat, lobby and RTC signal contracts |
 | `profile.ts` | Wallet-scoped avatar variants and update events |
 | `appkit.ts` | Reown project configuration, supported EVM networks and wagmi adapter |
+| `chains.ts` | Central chain IDs, names, explorers, RPCs and Session/Badge addresses |
 | `use-blockroom-contract.ts` | Contract reads, chain switching, writes, receipts and reconciliation |
 | `session-store.ts` | Pure Session ID, timing, finalization and local-day splitting rules |
-| `contracts/BlockRoom.sol` | Confirmed Session ledger and two soulbound ERC-1155 achievements |
-| `hardhat.config.ts` | Solidity profiles, Monad Testnet network and verifier configuration |
+| `contracts/BlockRoomSessions.sol` | Chain-specific confirmed Session ledger and cumulative totals |
+| `contracts/BlockRoomBadges.sol` | Session-backed First Session and 24 Hour Focus ERC-1155 achievements |
+| `hardhat.config.ts` | Solidity profiles, three deployment networks and verifier configuration |
 | `test/BlockRoom.ts` | Session validation, duplicate prevention, totals, Badge eligibility and soulbound tests |
 
-## 12. Refactor Guardrails
+## 12. Public Beta Guardrails
 
-The upcoming work is a visual and experience refactor, not a product rewrite.
-The following must remain compatible unless the product owner explicitly changes
-the functional specification:
+The visual system and product interactions are approved. Release work must keep
+the following compatible unless the product owner explicitly changes the
+functional specification:
 
 - Existing routes and legacy redirect.
 - Room slugs, names, capacity, and neutral descriptions.

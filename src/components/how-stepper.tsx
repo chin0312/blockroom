@@ -32,7 +32,7 @@ const steps = [
     title: "Create wallet activity",
     short: "On-chain record",
     icon: "check" as IconName,
-    description: "When an eligible session ends, its exact duration stays pending until the wallet approves a Monad Testnet transaction.",
+    description: "When an eligible session ends, its exact duration stays pending until the wallet approves a transaction on that session's supported testnet.",
     signal: "Confirmed transaction + session ID",
   },
   {

@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import type { Address, Hex } from "viem";
+import type { SupportedChainId } from "@/config/chains";
 import { BLOCKROOM_MIN_SESSION_SECONDS } from "@/contracts/blockroom";
 import {
   advanceSession,
@@ -53,9 +54,16 @@ type SessionContextValue = {
   legacyRecords: LegacySessionRecord[];
   legacyBadgeClaims: LegacyBadgeClaim[];
   getActiveSession: (walletAddress?: string) => OnchainSessionDraft | null;
-  getPendingSessions: (walletAddress?: string) => OnchainSessionDraft[];
+  getPendingSessions: (
+    walletAddress?: string,
+    chainId?: SupportedChainId,
+  ) => OnchainSessionDraft[];
   getLegacyRecords: (walletAddress?: string) => LegacySessionRecord[];
-  startSession: (roomSlug: string, walletAddress: Address) => OnchainSessionDraft;
+  startSession: (
+    roomSlug: string,
+    walletAddress: Address,
+    chainId: SupportedChainId,
+  ) => OnchainSessionDraft;
   tickSession: (sessionId: Hex) => void;
   finalizeSession: (sessionId: Hex) => OnchainSessionDraft | null;
   finalizeWalletSession: (walletAddress: string) => OnchainSessionDraft | null;
@@ -233,12 +241,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   );
 
   const getPendingSessions = useCallback(
-    (walletAddress?: string) => {
+    (walletAddress?: string, chainId?: SupportedChainId) => {
       if (!walletAddress) return [];
       const normalized = normalizeAddress(walletAddress);
       return sessions.filter(
         (session) =>
           normalizeAddress(session.walletAddress) === normalized &&
+          (chainId === undefined || session.chainId === chainId) &&
           !isActiveSession(session) &&
           session.status !== "confirmed",
       );
@@ -277,10 +286,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     getActiveSession,
     getPendingSessions,
     getLegacyRecords,
-    startSession(roomSlug, walletAddress) {
+    startSession(roomSlug, walletAddress, chainId) {
       const session = createSessionDraft({
         walletAddress,
         roomSlug,
+        chainId,
         ownerId: runtimeIdRef.current,
       });
       persistSession(session);

@@ -6,6 +6,7 @@ import {
   finalizeSessionDraft,
   splitSessionAcrossLocalDays,
 } from "./session-store";
+import { defaultChainConfig, supportedChains } from "@/config/chains";
 
 const wallet = "0x0000000000000000000000000000000000000001" as Address;
 
@@ -14,6 +15,7 @@ describe("session store", () => {
     const session = createSessionDraft({
       walletAddress: wallet,
       roomSlug: "learning-room-1",
+      chainId: defaultChainConfig.chainId,
       ownerId: "tab-a",
       nowSeconds: 1_000,
       nonce: "one",
@@ -28,6 +30,7 @@ describe("session store", () => {
     const session = createSessionDraft({
       walletAddress: wallet,
       roomSlug: "learning-room-1",
+      chainId: defaultChainConfig.chainId,
       ownerId: "tab-a",
       nowSeconds: 1_000,
       nonce: "two",
@@ -47,6 +50,7 @@ describe("session store", () => {
     const first = createSessionDraft({
       walletAddress: wallet,
       roomSlug: "learning-room-1",
+      chainId: defaultChainConfig.chainId,
       ownerId: "tab-a",
       nowSeconds: 1_000,
       nonce: "first",
@@ -54,9 +58,30 @@ describe("session store", () => {
     const second = createSessionDraft({
       walletAddress: wallet,
       roomSlug: "learning-room-1",
+      chainId: defaultChainConfig.chainId,
       ownerId: "tab-a",
       nowSeconds: 3_000,
       nonce: "second",
+    });
+    expect(first.sessionId).not.toBe(second.sessionId);
+  });
+
+  it("includes the selected chain in the session identity", () => {
+    const first = createSessionDraft({
+      walletAddress: wallet,
+      roomSlug: "learning-room-1",
+      chainId: supportedChains[0].chainId,
+      ownerId: "tab-a",
+      nowSeconds: 1_000,
+      nonce: "same-nonce",
+    });
+    const second = createSessionDraft({
+      walletAddress: wallet,
+      roomSlug: "learning-room-1",
+      chainId: supportedChains[1].chainId,
+      ownerId: "tab-a",
+      nowSeconds: 1_000,
+      nonce: "same-nonce",
     });
     expect(first.sessionId).not.toBe(second.sessionId);
   });

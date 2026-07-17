@@ -9,7 +9,7 @@ export default function DashboardPage() {
           <h1>Your focus record.</h1>
         </div>
         <p>
-          Confirmed values come from the BlockRoom contract. They are
+          Confirmed values come from the connected chain&apos;s BlockRoom contracts. They are
           wallet-signed self-attestations, not blockchain proof of productivity.
         </p>
       </header>

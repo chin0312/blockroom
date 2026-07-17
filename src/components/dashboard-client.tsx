@@ -10,7 +10,11 @@ import {
 } from "@phosphor-icons/react";
 import { useAccount } from "wagmi";
 import type { Hex } from "viem";
-import { blockRoomAddress, transactionExplorerUrl } from "@/contracts/blockroom";
+import {
+  getChainConfig,
+  isSupportedChainId,
+  transactionExplorerUrl,
+} from "@/config/chains";
 import { getRoom } from "@/lib/rooms";
 import { splitSessionAcrossLocalDays, type ConfirmedSessionRecord } from "@/lib/session-store";
 import { useConfirmedSessions, useBadgeContractState, useSessionSubmission } from "@/hooks/use-blockroom-contract";
@@ -51,13 +55,16 @@ function formatDate(unixSeconds: number) {
 
 export function DashboardClient() {
   const { address, chain, isConnected } = useAccount();
+  const chainId = chain?.id;
+  const supportedChainId = isSupportedChainId(chainId) ? chainId : undefined;
+  const chainConfig = getChainConfig(supportedChainId);
   const { hydrated, getPendingSessions, getLegacyRecords } = useSession();
-  const confirmedQuery = useConfirmedSessions(address);
-  const badgeQuery = useBadgeContractState(address);
+  const confirmedQuery = useConfirmedSessions(address, supportedChainId);
+  const badgeQuery = useBadgeContractState(address, supportedChainId);
   const submission = useSessionSubmission();
   const [retryingId, setRetryingId] = useState<Hex | null>(null);
   const records = confirmedQuery.data ?? [];
-  const pendingSessions = getPendingSessions(address);
+  const pendingSessions = getPendingSessions(address, supportedChainId);
   const legacyRecords = getLegacyRecords(address);
   const totalSeconds = records.reduce((sum, record) => sum + record.durationSeconds, 0);
   const streak = currentStreak(records);
@@ -73,13 +80,21 @@ export function DashboardClient() {
 
   if (!hydrated) return <div className="dashboard-loading" aria-label="Loading wallet activity" />;
 
-  const disconnectedLabel = !isConnected ? "Connect wallet" : !blockRoomAddress ? "Not configured" : confirmedQuery.isLoading ? "Loading" : undefined;
+  const disconnectedLabel = !isConnected
+    ? "Connect wallet"
+    : !chainConfig
+      ? "Unsupported network"
+      : !chainConfig.contracts.sessions
+        ? "Not deployed"
+        : confirmedQuery.isLoading
+          ? "Loading"
+          : undefined;
 
   return (
     <div className="dashboard-product-grid">
       <section className="dashboard-identity-panel">
         <div className="identity-protocol" aria-hidden="true"><AmbientModule variant="identity" size="card" /></div>
-        <div><span>Wallet identity</span><h2>{isConnected && address ? `${address.slice(0, 6)}...${address.slice(-4)}` : "Not connected"}</h2><p>{isConnected ? chain?.name ?? "Network unavailable" : "Connect a wallet to load its on-chain activity."}</p></div>
+        <div><span>Wallet identity</span><h2>{isConnected && address ? `${address.slice(0, 6)}...${address.slice(-4)}` : "Not connected"}</h2><p>{isConnected ? chainConfig?.name ?? chain?.name ?? "Unsupported network" : "Connect a wallet to load its chain-specific activity."}</p></div>
       </section>
 
       <div className="dashboard-stats">
@@ -88,8 +103,11 @@ export function DashboardClient() {
         <article><AmbientModule variant="signature" size="nano" /><span>Total Badges Earned</span><strong>{disconnectedLabel ?? totalBadges}</strong></article>
       </div>
 
-      {!blockRoomAddress && (
-        <div className="onchain-disclosure" role="status"><WarningCircle size={19} /> Contract not configured. Rooms remain usable, but no data is presented as on-chain.</div>
+      {isConnected && !chainConfig && (
+        <div className="onchain-disclosure" role="status"><WarningCircle size={19} /> Switch to Monad Testnet, Base Sepolia, or Ethereum Sepolia to view BlockRoom activity.</div>
+      )}
+      {chainConfig && !chainConfig.contracts.sessions && (
+        <div className="onchain-disclosure" role="status"><WarningCircle size={19} /> Session recording is not deployed on {chainConfig.name}. Rooms remain usable, but no data is presented as on-chain.</div>
       )}
       {confirmedQuery.error && (
         <div className="onchain-disclosure error" role="alert"><WarningCircle size={19} /> Confirmed records could not be loaded. Pending local records remain safe.</div>
@@ -103,14 +121,14 @@ export function DashboardClient() {
         {pendingSessions.length ? (
           <div className="pending-session-list">
             {pendingSessions.map((session) => {
-              const explorer = transactionExplorerUrl(session.txHash);
+              const explorer = transactionExplorerUrl(session.chainId, session.txHash);
               const busy = retryingId === session.sessionId && (submission.status === "awaiting-wallet" || submission.status === "submitting");
               return (
                 <article key={session.sessionId}>
                   <div><strong>{getRoom(session.roomSlug)?.name ?? session.roomSlug}</strong><p>{formatFocus(session.durationSeconds)} · {session.status.replaceAll("-", " ")}</p></div>
                   <div className="pending-session-actions">
                     {explorer && <a href={explorer} target="_blank" rel="noreferrer">Explorer</a>}
-                    <button type="button" disabled={busy || !submission.configured} onClick={() => void retrySession(session.sessionId)}>
+                    <button type="button" disabled={busy || !submission.isConfigured(session.chainId)} onClick={() => void retrySession(session.sessionId)}>
                       <CloudArrowUp size={16} /> {busy ? "Confirming" : session.status === "submitting" ? "Resume receipt" : "Retry"}
                     </button>
                   </div>
@@ -132,11 +150,15 @@ export function DashboardClient() {
             })}
           </div>
         ) : (
-          <div className="activity-empty"><Clock size={30} /><h3>No confirmed sessions</h3><p>An eligible session appears here only after its Monad Testnet transaction succeeds.</p><Link href="/rooms">Browse rooms <ArrowRight size={17} /></Link></div>
+          <div className="activity-empty"><Clock size={30} /><h3>No confirmed sessions</h3><p>An eligible session appears here only after its {chainConfig?.name ?? "selected network"} transaction succeeds.</p><Link href="/rooms">Browse rooms <ArrowRight size={17} /></Link></div>
         )}
       </section>
 
-      <BadgeSection address={address} completionCount={records.length} totalDurationSeconds={totalSeconds} />
+      <BadgeSection address={address} chainId={supportedChainId} completionCount={records.length} totalDurationSeconds={totalSeconds} />
+
+      <div className="onchain-disclosure" role="note">
+        <WarningCircle size={19} /> Dashboard history is scoped to the connected chain. Cross-chain aggregation is planned after Public Beta.
+      </div>
 
       {legacyRecords.length > 0 && (
         <section className="legacy-panel">

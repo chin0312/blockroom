@@ -11,13 +11,18 @@ import type { Address } from "viem";
 import {
   FIRST_SESSION_BADGE_ID,
   FOCUS_24_HOURS_BADGE_ID,
-  transactionExplorerUrl,
 } from "@/contracts/blockroom";
+import {
+  getChainConfig,
+  transactionExplorerUrl,
+  type SupportedChainId,
+} from "@/config/chains";
 import { useBadgeClaim, useBadgeContractState } from "@/hooks/use-blockroom-contract";
 import { AmbientModule } from "./ambient-module";
 
 type BadgeSectionProps = {
   address?: Address;
+  chainId?: SupportedChainId;
   completionCount: number;
   totalDurationSeconds: number;
 };
@@ -37,9 +42,10 @@ const badges = [
   },
 ] as const;
 
-export function BadgeSection({ address, completionCount, totalDurationSeconds }: BadgeSectionProps) {
-  const badgeState = useBadgeContractState(address);
-  const claim = useBadgeClaim();
+export function BadgeSection({ address, chainId, completionCount, totalDurationSeconds }: BadgeSectionProps) {
+  const chain = getChainConfig(chainId);
+  const badgeState = useBadgeContractState(address, chainId);
+  const claim = useBadgeClaim(chainId);
   const [pendingBadgeId, setPendingBadgeId] = useState<1n | 2n | null>(null);
 
   async function claimBadge(badgeId: 1n | 2n) {
@@ -55,7 +61,7 @@ export function BadgeSection({ address, completionCount, totalDurationSeconds }:
         <SealCheck size={29} weight="light" />
       </div>
       <p className="badge-disclosure">
-        Eligibility and ownership come from the BlockRoom contract. Claiming requires an explicit Monad Testnet transaction.
+        Eligibility and ownership come from confirmed Session records on {chain?.name ?? "the connected supported network"}. Claiming requires an explicit wallet transaction.
       </p>
       <div className="badge-grid">
         {badges.map((badge) => {
@@ -88,10 +94,16 @@ export function BadgeSection({ address, completionCount, totalDurationSeconds }:
           );
         })}
       </div>
-      {!claim.configured && <div className="badge-error" role="status">Contract not configured. No NFT claim is available yet.</div>}
+      {!address ? (
+        <div className="badge-error" role="status">Connect a wallet to load chain-specific Badge eligibility.</div>
+      ) : !chain ? (
+        <div className="badge-error" role="status">Switch to Monad Testnet, Base Sepolia, or Ethereum Sepolia to load Badge eligibility.</div>
+      ) : !claim.configured ? (
+        <div className="badge-error" role="status">Badge contract not deployed on {chain.name}. No NFT claim is available yet.</div>
+      ) : null}
       {claim.error && <div className="badge-error" role="alert">{claim.error}</div>}
-      {claim.hash && transactionExplorerUrl(claim.hash) && (
-        <a className="transaction-link" href={transactionExplorerUrl(claim.hash)} target="_blank" rel="noreferrer">View badge transaction</a>
+      {claim.hash && transactionExplorerUrl(chainId, claim.hash) && (
+        <a className="transaction-link" href={transactionExplorerUrl(chainId, claim.hash)} target="_blank" rel="noreferrer">View badge transaction</a>
       )}
     </section>
   );
