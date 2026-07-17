@@ -6,6 +6,35 @@ screen sharing and automatic joined-room timing without invented activity.
 
 Public Preview: <https://blockroom-chin0312-wowwwthemaya.vercel.app>
 
+## Product preview
+
+These screenshots come from the deployed Public Beta. They intentionally show
+truthful empty and disconnected states rather than fabricated members, chat or
+on-chain activity.
+
+<table>
+  <tr>
+    <td width="50%">
+      <strong>Home</strong><br />
+      <img src="docs/screenshots/home.jpg" alt="BlockRoom home page with editorial hero and honest empty-room preview" />
+    </td>
+    <td width="50%">
+      <strong>Rooms</strong><br />
+      <img src="docs/screenshots/rooms.jpg" alt="BlockRoom room catalogue showing four empty learning rooms" />
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <strong>Room</strong><br />
+      <img src="docs/screenshots/room.jpg" alt="Learning Room 1 before connecting a wallet" />
+    </td>
+    <td width="50%">
+      <strong>Dashboard</strong><br />
+      <img src="docs/screenshots/dashboard.jpg" alt="BlockRoom contribution calendar in its honest disconnected state" />
+    </td>
+  </tr>
+</table>
+
 Eligible focus sessions may be recorded on a supported testnet after explicit
 wallet approval. These records are wallet-signed **self-attestations**: the
 contracts validate format and accounting, but cannot prove productivity or
