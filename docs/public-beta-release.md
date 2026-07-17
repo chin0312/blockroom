@@ -76,7 +76,7 @@ errors and do not appear in the optimized build.
 - [ ] Pinning preserves video aspect ratio
 - [ ] Screen share renders locally and remotely
 - [ ] Fullscreen controls remain reachable
-- [ ] Room capacity stops a seventh client from joining
+- [x] Room capacity stops a seventh unique wallet from joining (model + live Supabase smoke)
 
 ## Preview deployment gate
 

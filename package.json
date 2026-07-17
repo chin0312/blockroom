@@ -9,6 +9,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
+    "test:room-realtime": "node scripts/room-realtime-smoke.mjs",
     "contracts:compile": "hardhat build",
     "contracts:test": "hardhat test nodejs",
     "contracts:deploy": "hardhat ignition deploy ignition/modules/BlockRoom.ts",

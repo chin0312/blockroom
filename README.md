@@ -147,10 +147,15 @@ which is not sufficient for external multi-browser testing.
 npm run contracts:compile
 npm run contracts:test
 npm run test
+npm run test:room-realtime
 ```
 
 The production threshold remains 1,800 seconds. Automated tests simulate
-timestamps instead of adding a shortened production path.
+timestamps instead of adding a shortened production path. The Realtime smoke
+test uses only the disposable test-wallet addresses derived inside a Node
+process; keys never enter the browser bundle or command line. It verifies six
+unique participants, seventh-wallet cleanup, same-wallet multi-session retention
+and released-slot replacement against an isolated Supabase Presence topic.
 
 ### Deploy a supported chain
 
@@ -188,6 +193,7 @@ status are in `docs/contracts.md`.
 npm run lint
 npx tsc --noEmit
 npm run test
+npm run test:room-realtime
 npm run contracts:test
 npm run build
 ```
@@ -225,4 +231,5 @@ manual authorization and review.
 - `docs/project-blueprint.md` — functional source of truth
 - `docs/contracts.md` — contract and multi-chain deployment reference
 - `docs/public-beta-release.md` — release and smoke-test checklist
+- `docs/room-stability.md` — Room identity/capacity model, root causes and A–T verification matrix
 - `docs/design-references/elevenlabs/DESIGN.md` — approved visual language

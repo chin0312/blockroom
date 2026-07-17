@@ -1,26 +1,21 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { createClient } from "@supabase/supabase-js";
 import type { LobbyMember, RoomMember } from "@/lib/realtime-types";
+import { freshRoomSessions, lobbyParticipants, reconcileRoomParticipants, ROOM_DISCONNECT_TIMEOUT_MS } from "@/lib/room-presence";
+import { getSupabaseRealtimeClient, isSupabaseRealtimeConfigured } from "@/lib/supabase-realtime";
 
-const STALE_AFTER_MS = 90_000;
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey =
-  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-function readLocalCount(roomSlug: string) {
+const STALE_AFTER_MS = ROOM_DISCONNECT_TIMEOUT_MS;
+function readLocalParticipants(roomSlug: string) {
   try {
     const members = JSON.parse(
       window.localStorage.getItem(`blockroom:presence:${roomSlug}`) ?? "{}",
     ) as Record<string, RoomMember>;
     const now = Date.now();
-    return Object.values(members).filter(
-      (member) => now - new Date(member.updatedAt).getTime() < STALE_AFTER_MS,
-    ).length;
+    const fresh = freshRoomSessions(Object.values(members), now, STALE_AFTER_MS);
+    return reconcileRoomParticipants(fresh).map((participant) => participant.participantKey);
   } catch {
-    return 0;
+    return [];
   }
 }
 
@@ -28,12 +23,17 @@ export function useRoomOccupancy(roomSlugs: string[]) {
   const slugKey = roomSlugs.join("|");
   const stableSlugs = useMemo(() => slugKey.split("|").filter(Boolean), [slugKey]);
   const [counts, setCounts] = useState<Record<string, number>>({});
-  const mode = supabaseUrl && supabaseKey ? "supabase" : "local-tabs";
+  const [addresses, setAddresses] = useState<Record<string, string[]>>({});
+  const mode = isSupabaseRealtimeConfigured ? "supabase" : "local-tabs";
 
   useEffect(() => {
     if (mode === "local-tabs") {
       const refresh = () => {
-        setCounts(Object.fromEntries(stableSlugs.map((slug) => [slug, readLocalCount(slug)])));
+        const nextAddresses = Object.fromEntries(
+          stableSlugs.map((slug) => [slug, readLocalParticipants(slug)]),
+        );
+        setAddresses(nextAddresses);
+        setCounts(Object.fromEntries(stableSlugs.map((slug) => [slug, nextAddresses[slug].length])));
       };
       refresh();
       const interval = window.setInterval(refresh, 2_000);
@@ -44,18 +44,15 @@ export function useRoomOccupancy(roomSlugs: string[]) {
       };
     }
 
-    const client = createClient(supabaseUrl!, supabaseKey!, {
-      realtime: { params: { eventsPerSecond: 10 } },
-    });
+    const client = getSupabaseRealtimeClient();
+    if (!client) return;
     const channel = client.channel("blockroom:lobby");
     channel
       .on("presence", { event: "sync" }, () => {
         const state = channel.presenceState<LobbyMember>();
-        const next = Object.fromEntries(stableSlugs.map((slug) => [slug, 0]));
-        Object.values(state).flat().forEach((member) => {
-          if (member.roomSlug in next) next[member.roomSlug] += 1;
-        });
-        setCounts(next);
+        const nextAddresses = lobbyParticipants(Object.values(state).flat(), stableSlugs);
+        setAddresses(nextAddresses);
+        setCounts(Object.fromEntries(stableSlugs.map((slug) => [slug, nextAddresses[slug].length])));
       })
       .subscribe();
 
@@ -64,5 +61,5 @@ export function useRoomOccupancy(roomSlugs: string[]) {
     };
   }, [mode, stableSlugs]);
 
-  return { counts, mode };
+  return { counts, addresses, mode };
 }

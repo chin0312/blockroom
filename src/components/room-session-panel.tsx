@@ -33,7 +33,6 @@ import {
   getChainConfig,
   isSupportedChainId,
   transactionExplorerUrl,
-  type SupportedChainId,
 } from "@/config/chains";
 import { useSessionSubmission } from "@/hooks/use-blockroom-contract";
 import { WalletControl } from "./wallet-control";
@@ -55,30 +54,34 @@ export function RoomSessionPanel({ room }: { room: Room }) {
     finalizeSession,
     finalizeWalletSession,
   } = useSession();
-  const realtime = useRoomRealtime(room.slug, address, room.capacity);
+  const realtime = useRoomRealtime(room.slug, address, chainId, room.capacity);
   const occupancy = useRoomOccupancy([room.slug]);
   const [activeTab, setActiveTab] = useState<"members" | "chat">("members");
   const [draft, setDraft] = useState("");
   const [leavePromptOpen, setLeavePromptOpen] = useState(false);
   const [leaveDestination, setLeaveDestination] = useState("/rooms");
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
   const [fullscreenAvailable, setFullscreenAvailable] = useState(false);
   const [frozenSession, setFrozenSession] = useState<OnchainSessionDraft | null>(null);
   const workspaceRef = useRef<HTMLElement>(null);
   const joinTimerStartedRef = useRef(false);
   const joinedWalletRef = useRef<Address | null>(null);
-  const joinedChainRef = useRef<SupportedChainId | null>(null);
   const submission = useSessionSubmission();
   const connectedChain = getChainConfig(chainId);
   const supportedChainId = isSupportedChainId(chainId) ? chainId : undefined;
   const session = getActiveSession(address);
-  const isCurrentRoom =
-    session?.roomSlug === room.slug && session.chainId === supportedChainId;
+  const isCurrentRoom = session?.roomSlug === room.slug;
   const elapsed = isCurrentRoom ? session.durationSeconds : 0;
   const eligible = elapsed >= REQUIRED_SESSION_SECONDS;
   const remaining = Math.max(0, REQUIRED_SESSION_SECONDS - elapsed);
   const progress = Math.min(100, (elapsed / REQUIRED_SESSION_SECONDS) * 100);
-  const me = realtime.members.find((member) => member.clientId === realtime.clientId);
+  const me = realtime.currentSession;
+  const currentParticipant = realtime.members.find(
+    (member) => member.participantKey === address?.toLowerCase(),
+  );
+  const isPrimaryPresenceSession =
+    currentParticipant?.primarySessionId === realtime.clientId;
   const media = useRoomMedia({
     clientId: realtime.clientId,
     members: realtime.members,
@@ -87,29 +90,42 @@ export function RoomSessionPanel({ room }: { room: Room }) {
     subscribeSignals: realtime.subscribeRtcSignals,
     updateMember: realtime.updateMember,
   });
-  const liveCount = Math.max(occupancy.counts[room.slug] ?? 0, realtime.members.length);
-  const roomFull = liveCount >= room.capacity;
+  const realtimeJoined = realtime.joined;
+  const updateRealtimeMember = realtime.updateMember;
+  const leaveRealtime = realtime.leave;
+  const stopAllMedia = media.stopAllMedia;
+  const liveCount = realtime.joined
+    ? realtime.members.length
+    : occupancy.counts[room.slug] ?? 0;
+  const walletAlreadyPresent = Boolean(
+    address && occupancy.addresses[room.slug]?.includes(address.toLowerCase()),
+  );
+  const roomFull = liveCount >= room.capacity && !walletAlreadyPresent;
 
   useEffect(() => {
-    if (!realtime.joined) {
+    if (!realtimeJoined) {
       joinTimerStartedRef.current = false;
       return;
     }
-    if (!address || !supportedChainId || joinTimerStartedRef.current) return;
+    if (
+      !address ||
+      !supportedChainId ||
+      !isPrimaryPresenceSession ||
+      joinTimerStartedRef.current
+    ) return;
     joinTimerStartedRef.current = true;
     joinedWalletRef.current = address;
-    joinedChainRef.current = supportedChainId;
     if (!isCurrentRoom) startSession(room.slug, address, supportedChainId);
-    void realtime.updateMember({ status: "focusing" });
-  }, [address, isCurrentRoom, realtime, room.slug, startSession, supportedChainId]);
+    void updateRealtimeMember({ status: "focusing" });
+  }, [address, isCurrentRoom, isPrimaryPresenceSession, realtimeJoined, room.slug, startSession, supportedChainId, updateRealtimeMember]);
 
   useEffect(() => {
-    if (!address || !realtime.joined || !isCurrentRoom || !session) return;
+    if (!address || !realtimeJoined || !isCurrentRoom || !session) return;
     const interval = window.setInterval(() => {
       tickSession(session.sessionId);
     }, 1000);
     return () => window.clearInterval(interval);
-  }, [address, isCurrentRoom, realtime.joined, session, tickSession]);
+  }, [address, isCurrentRoom, realtimeJoined, session, tickSession]);
 
   useEffect(() => {
     let cancelled = false;
@@ -145,13 +161,13 @@ export function RoomSessionPanel({ room }: { room: Room }) {
     setLeavePromptOpen(false);
     await realtime.leave();
     if (document.fullscreenElement) await document.exitFullscreen();
+    setIsExpanded(false);
   }
 
   async function finishLeave(recordNow: boolean) {
     const finalized = session ? finalizeSession(session.sessionId) : null;
     await disconnectFromRoom();
     joinedWalletRef.current = null;
-    joinedChainRef.current = null;
     if (!finalized) {
       router.push(leaveDestination);
       return;
@@ -173,27 +189,32 @@ export function RoomSessionPanel({ room }: { room: Room }) {
 
   useEffect(() => {
     const joinedWallet = joinedWalletRef.current;
-    const joinedChain = joinedChainRef.current;
-    if (!realtime.joined || !joinedWallet || !joinedChain) return;
-    if (
-      address?.toLowerCase() === joinedWallet.toLowerCase() &&
-      chainId === joinedChain
-    ) return;
+    if (!realtimeJoined || !joinedWallet) return;
+    if (address?.toLowerCase() === joinedWallet.toLowerCase()) return;
     const finalized = finalizeWalletSession(joinedWallet);
     if (finalized) setFrozenSession(finalized);
-    media.stopAllMedia();
-    void realtime.leave();
+    stopAllMedia();
+    void leaveRealtime();
     setLeavePromptOpen(false);
     joinedWalletRef.current = null;
-    joinedChainRef.current = null;
-  }, [address, chainId, finalizeWalletSession, media, realtime]);
+  }, [address, finalizeWalletSession, leaveRealtime, realtimeJoined, stopAllMedia]);
 
   async function toggleFullscreen() {
-    if (!workspaceRef.current || !fullscreenAvailable) return;
+    if (!workspaceRef.current) return;
+    if (isExpanded) {
+      setIsExpanded(false);
+      return;
+    }
     if (document.fullscreenElement === workspaceRef.current) {
       await document.exitFullscreen();
+    } else if (fullscreenAvailable) {
+      try {
+        await workspaceRef.current.requestFullscreen();
+      } catch {
+        setIsExpanded(true);
+      }
     } else {
-      await workspaceRef.current.requestFullscreen();
+      setIsExpanded(true);
     }
   }
 
@@ -302,7 +323,7 @@ export function RoomSessionPanel({ room }: { room: Room }) {
   }
 
   return (
-    <section ref={workspaceRef} className={`room-workspace${isFullscreen ? " is-fullscreen" : ""}`}>
+    <section ref={workspaceRef} className={`room-workspace${isFullscreen ? " is-fullscreen" : ""}${isExpanded ? " is-expanded" : ""}`}>
       <div className="workspace-main">
         <div className="workspace-tabs">
           <div className="workspace-tab-group" role="tablist" aria-label="Room workspace views">
@@ -321,12 +342,11 @@ export function RoomSessionPanel({ room }: { room: Room }) {
             type="button"
             className="workspace-fullscreen-action"
             onClick={() => void toggleFullscreen()}
-            disabled={!fullscreenAvailable}
-            aria-label={isFullscreen ? "Exit room fullscreen" : "Open room fullscreen"}
-            title={fullscreenAvailable ? (isFullscreen ? "Exit fullscreen" : "Present room fullscreen") : "Fullscreen is unavailable in this browser"}
+            aria-label={isFullscreen || isExpanded ? "Exit expanded room" : "Expand room"}
+            title={isFullscreen || isExpanded ? "Exit expanded room" : fullscreenAvailable ? "Present room fullscreen" : "Expand room in this page"}
           >
-            {isFullscreen ? <CornersIn size={19} /> : <CornersOut size={19} />}
-            <span>{isFullscreen ? "Exit" : "Fullscreen"}</span>
+            {isFullscreen || isExpanded ? <CornersIn size={19} /> : <CornersOut size={19} />}
+            <span>{isFullscreen || isExpanded ? "Exit" : "Fullscreen"}</span>
           </button>
         </div>
 
@@ -334,7 +354,7 @@ export function RoomSessionPanel({ room }: { room: Room }) {
           {activeTab === "members" ? (
             <ActiveMembers
               members={realtime.members}
-              currentClientId={realtime.clientId}
+              currentAddress={address}
               localStream={media.previewStream}
               remoteStreams={media.remoteStreams}
             />

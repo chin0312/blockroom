@@ -5,19 +5,32 @@ export type MemberFocusStatus = "focusing" | "paused" | "available";
 export type RoomMember = {
   clientId: string;
   address: string;
+  chainId?: number;
+  visible: boolean;
   status: MemberFocusStatus;
   muted: boolean;
   sharing: boolean;
   cameraOn: boolean;
   avatar: AvatarVariant;
   joinedAt: string;
+  activityAt: string;
   updatedAt: string;
 };
 
 export type LobbyMember = {
   clientId: string;
   roomSlug: string;
+  address: string;
+  joinedAt: string;
   updatedAt: string;
+};
+
+export type RoomParticipant = RoomMember & {
+  /** Canonical Room identity. Never includes a chain or connection id. */
+  participantKey: string;
+  primarySessionId: string;
+  sessionIds: string[];
+  sessionCount: number;
 };
 
 export type RtcSignal = {

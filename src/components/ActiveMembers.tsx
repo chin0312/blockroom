@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   MicrophoneSlash,
   MonitorArrowUp,
@@ -10,11 +10,13 @@ import {
   VideoCamera,
 } from "@phosphor-icons/react";
 import { motion, useReducedMotion } from "motion/react";
-import { shortAddress, type RoomMember } from "@/lib/realtime-types";
+import { getChainConfig } from "@/config/chains";
+import { clampParticipantPage, participantPageSize } from "@/lib/room-presence";
+import { shortAddress, type RoomParticipant } from "@/lib/realtime-types";
 
 type ActiveMembersProps = {
-  members: RoomMember[];
-  currentClientId?: string;
+  members: RoomParticipant[];
+  currentAddress?: string;
   localStream?: MediaStream | null;
   remoteStreams?: Record<string, MediaStream>;
 };
@@ -140,7 +142,7 @@ function MemberTile({
   primary,
   onPin,
 }: {
-  member: RoomMember;
+  member: RoomParticipant;
   stream?: MediaStream | null;
   isCurrent: boolean;
   isPinned: boolean;
@@ -187,6 +189,7 @@ function MemberTile({
           <strong>{shortAddress(member.address)}</strong>
           {isCurrent && <span className="you-label">You</span>}
           <span>{statusLabel[member.status]}</span>
+          {getChainConfig(member.chainId)?.name && <span>{getChainConfig(member.chainId)?.name}</span>}
         </div>
         <div className="member-signals" aria-label="Member media status">
           {member.muted && <span title="Microphone muted"><MicrophoneSlash size={16} /></span>}
@@ -198,29 +201,66 @@ function MemberTile({
   );
 }
 
-export function ActiveMembers({
+function ActiveMembersView({
   members,
-  currentClientId,
+  currentAddress,
   localStream,
   remoteStreams = {},
 }: ActiveMembersProps) {
-  const [pinnedClientId, setPinnedClientId] = useState<string | null>(null);
+  const [pinnedParticipantKey, setPinnedParticipantKey] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(6);
+  const touchStartRef = useRef<number | null>(null);
   const previousSharingRef = useRef<string | null>(null);
   const sharingMember = members.find((member) => member.sharing);
 
   useEffect(() => {
-    if (pinnedClientId && !members.some((member) => member.clientId === pinnedClientId)) {
-      queueMicrotask(() => setPinnedClientId(null));
-    }
-  }, [members, pinnedClientId]);
+    let frame = 0;
+    const updatePageSize = () => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        const next = participantPageSize(window.innerWidth, window.innerHeight);
+        setPageSize((current) => current === next ? current : next);
+      });
+    };
+    updatePageSize();
+    window.addEventListener("resize", updatePageSize, { passive: true });
+    window.addEventListener("orientationchange", updatePageSize);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", updatePageSize);
+      window.removeEventListener("orientationchange", updatePageSize);
+    };
+  }, []);
+
+  const pageCount = Math.max(1, Math.ceil(members.length / pageSize));
+  const safePage = clampParticipantPage(page, members.length, pageSize);
+  const visibleMembers = useMemo(
+    () => members.slice(safePage * pageSize, safePage * pageSize + pageSize),
+    [members, pageSize, safePage],
+  );
 
   useEffect(() => {
-    const sharingId = sharingMember?.clientId ?? null;
-    if (sharingId && sharingId !== previousSharingRef.current && !pinnedClientId) {
-      queueMicrotask(() => setPinnedClientId(sharingId));
+    if (page !== safePage) queueMicrotask(() => setPage(safePage));
+  }, [page, safePage]);
+
+  useEffect(() => {
+    if (pinnedParticipantKey && !members.some((member) => member.participantKey === pinnedParticipantKey)) {
+      queueMicrotask(() => setPinnedParticipantKey(null));
+    }
+  }, [members, pinnedParticipantKey]);
+
+  useEffect(() => {
+    const sharingId = sharingMember?.participantKey ?? null;
+    if (sharingId && sharingId !== previousSharingRef.current && !pinnedParticipantKey) {
+      const sharingIndex = members.findIndex((member) => member.participantKey === sharingId);
+      queueMicrotask(() => {
+        setPinnedParticipantKey(sharingId);
+        if (sharingIndex >= 0) setPage(Math.floor(sharingIndex / pageSize));
+      });
     }
     previousSharingRef.current = sharingId;
-  }, [pinnedClientId, sharingMember?.clientId]);
+  }, [members, pageSize, pinnedParticipantKey, sharingMember?.participantKey]);
 
   if (!members.length) {
     return (
@@ -232,27 +272,51 @@ export function ActiveMembers({
     );
   }
 
-  const pinnedMember = members.find((member) => member.clientId === pinnedClientId);
-  const streamFor = (member: RoomMember) =>
-    member.clientId === currentClientId ? localStream : remoteStreams[member.clientId];
-  const renderTile = (member: RoomMember) => (
+  const pinnedMember = visibleMembers.find((member) => member.participantKey === pinnedParticipantKey);
+  const isCurrentMember = (member: RoomParticipant) =>
+    member.participantKey === currentAddress?.toLowerCase();
+  const streamFor = (member: RoomParticipant) =>
+    isCurrentMember(member) ? localStream : remoteStreams[member.clientId];
+  const renderTile = (member: RoomParticipant) => (
     <MemberTile
-      key={member.clientId}
+      key={member.participantKey}
       member={member}
       stream={streamFor(member)}
-      isCurrent={member.clientId === currentClientId}
-      isPinned={member.clientId === pinnedClientId}
-      primary={member.clientId === pinnedClientId}
-      onPin={() => setPinnedClientId((current) => current === member.clientId ? null : member.clientId)}
+      isCurrent={isCurrentMember(member)}
+      isPinned={member.participantKey === pinnedParticipantKey}
+      primary={member.participantKey === pinnedParticipantKey}
+      onPin={() => setPinnedParticipantKey((current) => current === member.participantKey ? null : member.participantKey)}
     />
   );
 
   return (
     <div
-      className={`meeting-stage meeting-grid count-${members.length}${pinnedMember ? ` has-pin${members.length === 1 ? " solo-pin" : ""}` : ""}`}
-      aria-live="polite"
+      className="meeting-stage-shell"
+      onTouchStart={(event) => { touchStartRef.current = event.touches[0]?.clientX ?? null; }}
+      onTouchEnd={(event) => {
+        const start = touchStartRef.current;
+        const end = event.changedTouches[0]?.clientX;
+        touchStartRef.current = null;
+        if (start == null || end == null || Math.abs(end - start) < 48) return;
+        setPage((current) => clampParticipantPage(current + (end < start ? 1 : -1), members.length, pageSize));
+      }}
     >
-      {members.map((member) => renderTile(member))}
+      <div
+        className={`meeting-stage meeting-grid count-${visibleMembers.length}${pinnedMember ? ` has-pin${visibleMembers.length === 1 ? " solo-pin" : ""}` : ""}`}
+        aria-live="polite"
+      >
+        {visibleMembers.map((member) => renderTile(member))}
+      </div>
+      {pageCount > 1 && (
+        <nav className="meeting-pagination" aria-label="Participant pages">
+          <button type="button" disabled={safePage === 0} onClick={() => setPage((current) => Math.max(0, current - 1))} aria-label="Previous participant page">←</button>
+          <span>Page {safePage + 1} of {pageCount}</span>
+          <div>{Array.from({ length: pageCount }, (_, index) => <button key={index} type="button" className={index === safePage ? "active" : ""} onClick={() => setPage(index)} aria-label={`Participant page ${index + 1}`} />)}</div>
+          <button type="button" disabled={safePage === pageCount - 1} onClick={() => setPage((current) => Math.min(pageCount - 1, current + 1))} aria-label="Next participant page">→</button>
+        </nav>
+      )}
     </div>
   );
 }
+
+export const ActiveMembers = memo(ActiveMembersView);
