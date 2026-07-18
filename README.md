@@ -226,6 +226,7 @@ manual authorization and review.
 
 ## References
 
+- [`docs/project-blueprint.md`](docs/project-blueprint.md) — creator blueprint for the product model, truthful-state rules, architecture and component responsibilities.
 - [`docs/contracts.md`](docs/contracts.md) — contract architecture, deployed addresses, transaction hashes and Viem examples.
 - [`docs/design-references/elevenlabs/DESIGN.md`](docs/design-references/elevenlabs/DESIGN.md) — retained visual-system reference.
 - [`docs/design-references/Generated image 3.png`](docs/design-references/Generated%20image%203.png) — selected visual direction.
