@@ -198,10 +198,9 @@ npm run contracts:test
 npm run build
 ```
 
-After each real chain deployment, complete the wallet QA checklist in
-`docs/public-beta-release.md`: short Session rejection, eligible Session,
-wallet rejection and retry, duplicate prevention, Dashboard reconciliation,
-both Badge gates, chain switching and explorer links.
+After each real chain deployment, manually verify short Session rejection,
+eligible Session submission, wallet rejection and retry, duplicate prevention,
+Dashboard reconciliation, both Badge gates, chain switching and explorer links.
 
 ## Preview deployment
 
@@ -213,9 +212,8 @@ Preview because Next.js inlines them into the client bundle.
 The stable Public Beta Preview is
 <https://blockroom-chin0312-wowwwthemaya.vercel.app>. Vercel Authentication is
 disabled for this project so external testers can open it without a Vercel
-account. Real-wallet transaction, realtime multi-browser and media checks are
-tracked separately in `docs/public-beta-release.md` and must never be marked as
-passed without genuine devices and wallet approvals.
+account. Real-wallet transaction, realtime multi-browser and media checks must
+be performed with genuine devices and wallet approvals.
 
 ## AI assistance and manual review
 
@@ -226,10 +224,8 @@ were supplied or approved manually. Contract deployments, environment values,
 wallet approvals, explorer verification and final Preview acceptance require
 manual authorization and review.
 
-## Product references
+## References
 
-- `docs/project-blueprint.md` — functional source of truth
-- `docs/contracts.md` — contract and multi-chain deployment reference
-- `docs/public-beta-release.md` — release and smoke-test checklist
-- `docs/room-stability.md` — Room identity/capacity model, root causes and A–T verification matrix
-- `docs/design-references/elevenlabs/DESIGN.md` — approved visual language
+- [`docs/contracts.md`](docs/contracts.md) — contract architecture, deployed addresses, transaction hashes and Viem examples.
+- [`docs/design-references/elevenlabs/DESIGN.md`](docs/design-references/elevenlabs/DESIGN.md) — retained visual-system reference.
+- [`docs/design-references/Generated image 3.png`](docs/design-references/Generated%20image%203.png) — selected visual direction.
