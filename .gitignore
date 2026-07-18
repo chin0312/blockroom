@@ -37,6 +37,11 @@ yarn-error.log*
 .env*
 !.env.example
 
+# Hackathon demo production files stay local and never enter the product repo.
+demo-assets/
+scripts/demo-record.mjs
+scripts/render-screencast.swift
+
 # vercel
 .vercel
 
